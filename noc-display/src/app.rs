@@ -53,6 +53,13 @@ pub struct App {
     last_message: String,
     transport_connected: bool,
     ready_timer: Option<usize>,
+    /// Aucun config.toml trouve (ni par compte, ni global) : `refresh()`
+    /// affiche un message dedie plutot que le texte d'echec RDP generique.
+    config_missing: bool,
+    /// config.toml present et `provides_rdp` actif, mais Manager ne connait
+    /// pas ce kiosque (404) : message distinct de `config_missing`, puisque
+    /// le probleme n'est pas local mais cote Manager.
+    kiosk_missing: bool,
 }
 impl App {
     fn new() -> Result<Self> {
@@ -80,6 +87,8 @@ impl App {
             last_message: String::new(),
             transport_connected: false,
             ready_timer: None,
+            config_missing: false,
+            kiosk_missing: false,
         })
     }
     fn schedule_first_attempt(&mut self) {
@@ -96,16 +105,24 @@ impl App {
         self.client.take();
         match Config::read() {
             Ok(config) => {
+                self.config_missing = false;
+                self.kiosk_missing = false;
                 self.config = config;
                 self.window.configure(&self.config, &self.username);
             }
             Err(message) => {
+                // Pas de fichier du tout (ni par compte, ni global) : message
+                // dedie plutot que le texte d'echec RDP generique, qui ferait
+                // croire a une boucle de reconnexion RDP normale.
+                self.config_missing = !Config::exists();
+                self.kiosk_missing = false;
                 self.failed(&message);
                 return;
             }
         }
         if !self.config.rdp.enabled {
             self.machine = Machine::new();
+            self.window.set_state_code(self.machine.state.code());
             self.window
                 .update(Status::Ready, "Bienvenue. Votre poste est prêt.", false);
             self.last_message.clear();
@@ -117,20 +134,32 @@ impl App {
                 self.config.manager.port,
                 &self.username,
             ) {
+                // Manager has no kiosk record for this Windows account name :
+                // distinct from a network/server failure, someone needs to go
+                // create/configure this kiosk on Manager.
+                Ok(crate::health::RdpConfigFetch::KioskNotFound) => {
+                    self.kiosk_missing = true;
+                    self.failed("RDP config: kiosk not found on Manager");
+                    return;
+                }
                 // Manager turned this kiosk's RDP off: same idle screen as
                 // the local !rdp.enabled case above, not a connection error.
-                Ok(remote) if !remote.enabled => {
+                Ok(crate::health::RdpConfigFetch::Found(remote)) if !remote.enabled => {
+                    self.kiosk_missing = false;
                     self.machine = Machine::new();
+                    self.window.set_state_code(self.machine.state.code());
                     self.window
                         .update(Status::Ready, "Bienvenue. Votre poste est prêt.", false);
                     self.last_message.clear();
                     return;
                 }
-                Ok(remote) if remote.server.trim().is_empty() => {
+                Ok(crate::health::RdpConfigFetch::Found(remote)) if remote.server.trim().is_empty() => {
+                    self.kiosk_missing = false;
                     self.failed("RDP config from Manager: enabled but no server configured");
                     return;
                 }
-                Ok(remote) => {
+                Ok(crate::health::RdpConfigFetch::Found(remote)) => {
+                    self.kiosk_missing = false;
                     // Effective settings for this attempt only: Config::read()
                     // overwrites self.config wholesale at the top of the next
                     // attempt(), so nothing here leaks across reconnects.
@@ -342,6 +371,7 @@ impl App {
     }
     fn refresh(&mut self) {
         publish_status(self.machine.state);
+        self.window.set_state_code(self.machine.state.code());
         let (status, text, animate) = match self.machine.state {
             AppState::Starting | AppState::Connected => return,
             AppState::Connecting => (
@@ -349,11 +379,23 @@ impl App {
                 self.config.ui.connecting_text.clone(),
                 true,
             ),
+            // Pas d'erreur RDP a proprement parler : rien a corriger sur cette
+            // machine que recharger un fichier. Pas de compte a rebours (ca
+            // ferait croire a une vraie boucle d'echec RDP) : juste l'icone
+            // animee, pour montrer que ca continue de verifier tout seul.
+            AppState::Error | AppState::Reconnecting if self.config_missing || self.kiosk_missing => {
+                let title = if self.config_missing {
+                    "Aucune configuration trouvée…"
+                } else {
+                    "Aucune configuration kiosk trouvée…"
+                };
+                (Status::Loading, title.to_string(), true)
+            }
             AppState::Error | AppState::Reconnecting => {
                 let title = if self.machine.state == AppState::Error {
-                    &self.config.ui.error_text
+                    self.config.ui.error_text.clone()
                 } else {
-                    &self.config.ui.disconnected_text
+                    self.config.ui.disconnected_text.clone()
                 };
                 let countdown = self.config.ui.reconnecting_text.replace(
                     "{seconds}",

@@ -47,6 +47,9 @@ impl Renderer {
             }
         }
     }
+    pub fn set_state_code(&mut self, code: &'static str) {
+        self.text.set_state_code(code);
+    }
 
     pub fn paint(
         &mut self,
@@ -158,6 +161,12 @@ impl Renderer {
                 &surface.target,
                 self.animation_start.elapsed().as_secs_f32(),
             );
+            // Never lets EndDraw go unmatched: a decorative element (clock,
+            // rebuilt fresh every frame, unlike the rest of the cached text)
+            // failing to lay out isn't worth aborting the whole repaint for.
+            if let Err(error) = self.text.draw_live_info(&surface.target, viewport.0, viewport.1) {
+                crate::log_error(format!("Live info HRESULT={:08x}", error.code().0));
+            }
             if let Err(error) = surface.target.EndDraw(None, None) {
                 self.discard_surface();
                 return Err(error);

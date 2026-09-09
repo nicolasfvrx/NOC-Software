@@ -160,6 +160,75 @@ Ordre de recherche de `config.toml` :
 `$NOC_AGENT_CONFIG` → `./config.toml` → `~/.config/noc-agent/config.toml`
 → `<dossier du binaire>/config.toml` → `/etc/noc-agent/config.toml`.
 
+### Configuration globale (un seul fichier pour tous les kiosques)
+
+`[manager]` est la seule section obligatoire ; rien d'autre ne varie d'un
+kiosque à l'autre sur une même machine (aucune identité de kiosque dans le
+fichier — elle vient de `id -un`). Un seul `config.toml` global suffit donc
+pour toute la machine, à `/etc/noc-agent/config.toml` (repli le plus bas
+dans l'ordre de recherche ci-dessus, utilisé par tout compte qui n'a pas
+son propre `~/.config/noc-agent/config.toml`) :
+
+```toml
+[manager]
+url = "http://192.168.10.64:8080"
+poll_seconds = 30
+retry_seconds = 10
+command_poll_seconds = 5
+heartbeat_seconds = 30
+timeout_seconds = 10
+
+[ui]
+# Chemins absolus obligatoires ici : le dossier de config.toml n'est pas
+# /opt/noc-agent, les chemins relatifs par défaut ne marcheraient pas.
+background = "/opt/noc-agent/assets/background.jpg"
+logo       = "/opt/noc-agent/assets/logo.png"
+
+[firefox]
+flatpak = "/usr/bin/flatpak"
+app_id  = "org.mozilla.firefox"
+# Vide => cherché dans le dossier de config.toml (/etc/noc-agent/), donc faux ici.
+wrapper = "/opt/noc-agent/firefox-flatpak-wrapper.sh"
+# Vide => cherché dans $PATH ; à préciser seulement si geckodriver n'y est pas.
+# geckodriver = "/usr/local/bin/geckodriver"
+
+[log]
+# ~/ est développé vers le $HOME du compte Linux courant, PAS vers le
+# dossier de config.toml : chaque kiosque garde son propre journal, même
+# avec ce config.toml global partagé par tous.
+file = "~/.local/state/noc-agent/noc-agent.log"
+```
+
+`profile_dir` (profil Firefox persistant) n'a pas besoin d'être précisé
+ici : il commence déjà par `~/` par défaut, donc toujours résolu par
+rapport au `$HOME` du compte courant, jamais par rapport au dossier de
+`config.toml`.
+
+Installation (fichiers déjà en place, ex. copiés depuis l'archive de release) :
+
+```bash
+sudo chmod 755 /opt/noc-agent/noc-agent
+sudo chmod 755 /opt/noc-agent/firefox-flatpak-wrapper.sh
+sudo chmod 644 /opt/noc-agent/assets/background.jpg
+sudo chmod 644 /opt/noc-agent/assets/logo.png
+sudo chmod 644 /etc/noc-agent/config.toml
+```
+
+**Autorisation (`api_token`) : non prise en charge côté Agent.** Si
+`api_token` est renseigné dans le `config.toml` de NOC Manager, toutes les
+routes `/api/*` exigent l'en-tête `Authorization: Bearer <token>` — or NOC
+Agent n'envoie actuellement aucun en-tête de ce type (voir « Périmètre
+actuel » dans le [README racine](../README.md)). En pratique : laisser
+`api_token` **vide** côté Manager tant que cette association n'est pas
+implémentée. Avec un token renseigné, l'agent reçoit des 401 partout :
+- sur `GET /api/kiosk/{username}` (config du kiosque) : visible à l'écran
+  (« Serveur de configuration indisponible », détail `HTTP 401`), avec
+  nouvelle tentative périodique — pas de crash, mais rien ne s'affiche ;
+- sur les commandes distantes et le heartbeat : silencieux, juste journalisé
+  une fois puis ignoré (fonctionnement normal maintenu), donc `restart_agent`/
+  `restart_browser` et la remontée de statut cessent de fonctionner sans
+  aucun signal visible côté écran.
+
 ## 5. Autostart XFCE / xRDP
 
 Un fichier `.desktop` par utilisateur kiosque (ou dans

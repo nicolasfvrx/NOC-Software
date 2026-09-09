@@ -115,6 +115,13 @@ impl Config {
         })?;
         Ok(dir.join("config.toml"))
     }
+    /// Vrai si un config.toml existe (par compte ou global), sans le lire
+    /// ni le valider. Utilise pour distinguer "aucun fichier trouve" d'un
+    /// fichier present mais invalide/rejete.
+    pub fn exists() -> bool {
+        Self::path().ok().filter(|p| p.is_file()).is_some()
+            || Self::global_path().ok().filter(|p| p.is_file()).is_some()
+    }
     pub fn read() -> Result<Self, String> {
         let path = Self::path()
             .ok()

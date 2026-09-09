@@ -3,11 +3,17 @@ use crate::{config::Config, status::Status};
 use windows::{
     core::*,
     Win32::Graphics::{Direct2D::Common::*, Direct2D::*, DirectWrite::*},
+    Win32::System::SystemInformation::GetLocalTime,
 };
 
 pub struct TextRenderer {
     factory: IDWriteFactory,
     details: Vec<u16>,
+    username: String,
+    /// Code court de l'etat courant (AppState::code()), affiche en bas a
+    /// gauche a cote du nom d'utilisateur ; mis a jour en dehors du cycle
+    /// prepare()/draw() habituel, voir `set_state_code`.
+    state_code: &'static str,
     message_override: Option<String>,
 }
 
@@ -33,6 +39,8 @@ impl TextRenderer {
         Ok(Self {
             factory: unsafe { DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)? },
             details: config.details(username).encode_utf16().collect(),
+            username: username.to_owned(),
+            state_code: "STARTING",
             message_override: None,
         })
     }
@@ -42,6 +50,9 @@ impl TextRenderer {
         }
         self.message_override = Some(text.to_owned());
         true
+    }
+    pub fn set_state_code(&mut self, code: &'static str) {
+        self.state_code = code;
     }
 
     unsafe fn layout(
@@ -204,6 +215,79 @@ impl TextRenderer {
             })
         }
     }
+
+    /// Bandeau bas : `utilisateur • etat` a gauche, heure locale en direct a
+    /// droite. Construit a chaque appel plutot que mis en cache dans
+    /// `TextFrame` : contrairement au reste du texte, l'heure change sans
+    /// qu'aucune des cles de cache (taille, statut, apercu) ne bouge.
+    /// Appele par `Renderer::paint()` a chaque repaint (voir le timer
+    /// applicatif de 250 ms dans window.rs), independamment du throttling
+    /// habituel sur les autres textes.
+    pub unsafe fn draw_live_info(
+        &self,
+        target: &ID2D1HwndRenderTarget,
+        width: f32,
+        height: f32,
+    ) -> Result<()> {
+        let margin = (height * 0.018).clamp(8.0, 24.0).min(width * 0.05);
+        let size = (height * 0.015).clamp(10.0, 16.0);
+        let box_width = (width - margin * 2.0).max(0.1);
+
+        let identity_text: Vec<u16> = format!("{}  •  {}", self.username, self.state_code)
+            .encode_utf16()
+            .collect();
+        let (identity, identity_h) = self.layout(&identity_text, size, box_width, 40.0)?;
+        identity.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING)?;
+        identity.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
+
+        let clock_text: Vec<u16> = local_time_string().encode_utf16().collect();
+        let (clock, clock_h) = self.layout(&clock_text, size, box_width, 40.0)?;
+        clock.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING)?;
+        clock.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
+
+        let secondary = target.CreateSolidColorBrush(
+            &D2D1_COLOR_F {
+                r: 0.70,
+                g: 0.79,
+                b: 0.89,
+                a: 1.0,
+            },
+            None,
+        )?;
+        let shadow = target.CreateSolidColorBrush(
+            &D2D1_COLOR_F {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 0.18,
+            },
+            None,
+        )?;
+
+        let y = height - margin - identity_h.max(clock_h);
+        for layout in [&identity, &clock] {
+            let origin = D2D_POINT_2F { x: margin, y };
+            target.DrawTextLayout(
+                D2D_POINT_2F {
+                    x: origin.x + 1.0,
+                    y: origin.y + 1.0,
+                },
+                layout,
+                &shadow,
+                D2D1_DRAW_TEXT_OPTIONS_CLIP,
+            );
+            target.DrawTextLayout(origin, layout, &secondary, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
+        Ok(())
+    }
+}
+
+fn local_time_string() -> String {
+    let time = unsafe { GetLocalTime() };
+    format!(
+        "{:02}/{:02}/{} {:02}:{:02}:{:02}",
+        time.wDay, time.wMonth, time.wYear, time.wHour, time.wMinute, time.wSecond
+    )
 }
 
 impl TextFrame {

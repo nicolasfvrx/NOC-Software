@@ -65,15 +65,27 @@ fn default_rdp_port() -> u16 {
     3389
 }
 
+/// Resultat de la recuperation de la config RDP : distingue "Manager ne
+/// connait pas ce kiosque" (404, cas normal si personne ne l'a encore
+/// configure cote Manager) d'un vrai echec reseau/serveur, pour que
+/// `app.rs` puisse afficher un message adapte a chacun.
+pub enum RdpConfigFetch {
+    Found(RdpConfigResponse),
+    KioskNotFound,
+}
+
 /// Recupere la configuration RDP du kiosque `username` (le compte Windows
 /// courant) depuis NOC Manager. Appele de maniere synchrone par
 /// `app.rs::attempt()` : un echec doit interrompre la tentative de
 /// connexion en cours, exactement comme une erreur RDP locale.
-pub fn fetch_rdp_config(host: &str, port: u16, username: &str) -> Result<RdpConfigResponse> {
+pub fn fetch_rdp_config(host: &str, port: u16, username: &str) -> Result<RdpConfigFetch> {
     let path = format!("/api/kiosk/{username}/rdp");
-    let body = get(host, port, &path)?;
-    serde_json::from_slice(&body)
-        .map_err(|e| Error::new(E_FAIL, format!("réponse JSON invalide : {e}").into()))
+    match get(host, port, &path)? {
+        HttpGet::NotFound => Ok(RdpConfigFetch::KioskNotFound),
+        HttpGet::Body(body) => serde_json::from_slice(&body)
+            .map(RdpConfigFetch::Found)
+            .map_err(|e| Error::new(E_FAIL, format!("réponse JSON invalide : {e}").into())),
+    }
 }
 
 fn wide(text: &str) -> Vec<u16> {
@@ -189,9 +201,16 @@ fn post(host: &str, port: u16, path: &str, json_body: &str) -> Result<()> {
 /// config.toml/credentials.dat).
 const MAX_BODY_BYTES: usize = 16 * 1024;
 
+enum HttpGet {
+    Body(Vec<u8>),
+    NotFound,
+}
+
 /// Synchronous HTTP/1.1 GET, returning the response body capped at
-/// `MAX_BODY_BYTES`. Only a 200 status is accepted.
-fn get(host: &str, port: u16, path: &str) -> Result<Vec<u8>> {
+/// `MAX_BODY_BYTES`. Only 200 and 404 are accepted; any other status is a
+/// hard error (network/server failure), unlike a 404 which is a normal,
+/// expected outcome (e.g. a kiosk not yet configured on Manager).
+fn get(host: &str, port: u16, path: &str) -> Result<HttpGet> {
     unsafe {
         let connection = open(host, port, "GET", path)?;
         WinHttpSendRequest(
@@ -204,6 +223,9 @@ fn get(host: &str, port: u16, path: &str) -> Result<Vec<u8>> {
         )?;
         WinHttpReceiveResponse(connection.request.0, std::ptr::null_mut())?;
         let status = status_code(connection.request.0)?;
+        if status == 404 {
+            return Ok(HttpGet::NotFound);
+        }
         if status != 200 {
             return Err(Error::new(E_FAIL, format!("HTTP {status}").into()));
         }
@@ -232,7 +254,7 @@ fn get(host: &str, port: u16, path: &str) -> Result<Vec<u8>> {
             chunk.truncate(read as usize);
             body.extend_from_slice(&chunk);
         }
-        Ok(body)
+        Ok(HttpGet::Body(body))
     }
 }
 

@@ -104,6 +104,17 @@ impl Window {
             }
         }
     }
+    /// Code court de l'etat courant, affiche dans le bandeau bas avec
+    /// l'heure en direct. N'invalide pas la fenetre lui-meme : le timer
+    /// applicatif (250 ms, WM_TIMER) s'en charge deja en continu, pour que
+    /// l'horloge avance meme sans autre changement d'etat.
+    pub fn set_state_code(&self, code: &'static str) {
+        if let Some(view) = self.context.view.borrow_mut().as_mut() {
+            if let Some(renderer) = view.renderer.as_mut() {
+                renderer.set_state_code(code);
+            }
+        }
+    }
     pub fn update(&self, status: Status, text: &str, animate: bool) {
         if let Some(view) = self.context.view.borrow_mut().as_mut() {
             view.status = status;
@@ -222,18 +233,12 @@ unsafe extern "system" fn window_proc(hwnd: HWND, message: u32, wp: WPARAM, lp: 
             if wp.0 == ANIMATION_TIMER && !IsIconic(hwnd).as_bool() {
                 let _ = InvalidateRect(hwnd, None, false);
             }
-            if wp.0 == APP_TIMER {
-                if let Some(context) = context {
-                    if let Ok(view) = context.view.try_borrow() {
-                        if view
-                            .as_ref()
-                            .map(|v| v.last_error.is_some())
-                            .unwrap_or(false)
-                        {
-                            let _ = InvalidateRect(hwnd, None, false);
-                        }
-                    }
-                }
+            // Inconditionnel (plus seulement sur erreur) : c'est ce qui fait
+            // avancer l'horloge du bandeau bas (draw_live_info) au moins 4
+            // fois par seconde, meme dans un etat par ailleurs statique
+            // (ex. "Bienvenue, votre poste est pret", sans ANIMATION_TIMER).
+            if wp.0 == APP_TIMER && !IsIconic(hwnd).as_bool() {
+                let _ = InvalidateRect(hwnd, None, false);
             }
             return LRESULT(0);
         }
