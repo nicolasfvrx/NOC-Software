@@ -48,14 +48,22 @@ background.jpg
 logo.png
 ```
 
-Pour chaque compte Windows, placer sa configuration à la racine de son profil :
-`%USERPROFILE%\config.toml`, par exemple `C:\Users\ecran1\config.toml` et
-`C:\Users\ecran2\config.toml`. Tous lancent le même EXE ; chaque configuration
-définit son serveur et son utilisateur RDP.
+Deux emplacements possibles pour `config.toml`, cherchés dans cet ordre :
 
-Copier le modèle `config.example.toml` sous ce nom dans chaque profil puis
-adapter ses paramètres. Le fichier `config.toml` à la racine du projet est un
-autre modèle, avec `enabled = false` pour le mode graphique seul.
+1. **Par compte** : `%USERPROFILE%\config.toml` (ex. `C:\Users\ecran1\config.toml`).
+   Prioritaire s'il existe — permet de particulariser un écran donné.
+2. **Global** : `C:\DisplayClient\config.toml`, à côté de l'EXE. Utilisé en
+   repli si le compte n'a pas son propre fichier. Un seul fichier pour toute
+   la machine.
+
+Avec la configuration RDP centralisée (`manager.provides_rdp`, voir plus bas),
+le fichier global suffit pour toute une machine : il ne reste plus qu'à créer
+chaque compte Windows avec le nom du kiosque correspondant dans Manager,
+sans aucun fichier à écrire par compte. Sans centralisation, chaque écran a
+besoin de son propre fichier (serveur/utilisateur RDP différents).
+
+Copier le modèle `config.example.toml` sous ce nom, à l'emplacement voulu,
+puis adapter ses paramètres.
 Renseigner `rdp.password` pour une connexion automatique sans provisionnement.
 
 ```toml
@@ -82,10 +90,11 @@ Fichier UTF-8 limité à 64 Kio ; clés inconnues rejetées sans recopier
 leur contenu dans les logs. Les anciens fichiers `kiosk-rpd-client.cfg` et
 `display-client.conf` ne sont plus lus. Le nom Windows vient de `GetUserNameW`.
 
-Les images sont cherchées à côté de l'EXE. La configuration est lue uniquement
-dans `%USERPROFILE%\config.toml`, indépendamment du dossier de travail : aucun
-repli vers une configuration partagée à côté de l'EXE. La configuration est
-relue avant chaque tentative ; en mode RDP désactivé, relancer après modification.
+Les images sont cherchées à côté de l'EXE. La configuration est cherchée dans
+`%USERPROFILE%\config.toml` puis, en repli, à côté de l'EXE — indépendamment
+du dossier de travail. La configuration est relue avant chaque tentative
+(chacun des deux emplacements, dans le même ordre) ; en mode RDP désactivé,
+relancer après modification.
 Les images sont chargées au lancement. Une image absente/invalide n'empêche pas
 RDP. Un TOML absent/invalide produit Error puis une nouvelle lecture, sans sortie.
 
@@ -154,7 +163,10 @@ Windows d'un poste Display exactement comme le `username` du kiosque
 correspondant dans Manager. Une fois cette convention respectée et
 `provides_rdp = true`, **aucun réglage RDP n'est nécessaire dans
 `config.toml`** au-delà de `[rdp] enabled = true` — créer le compte Windows
-avec le bon nom suffit.
+avec le bon nom suffit. Combiné au `config.toml` **global** (voir "Livraison
+et configuration" plus haut), ça n'exige plus qu'un seul fichier pour toute
+la machine : chaque nouveau compte Windows créé avec le bon nom se connecte
+automatiquement, sans aucun fichier à écrire pour lui.
 
 Comportement :
 

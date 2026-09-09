@@ -25,7 +25,7 @@ pub fn init(path: &Path, username: &str) {
         .open(path)
         .is_err()
     {
-        let fallback = std::env::temp_dir().join(format!("kiosk-agent-{username}.log"));
+        let fallback = std::env::temp_dir().join(format!("noc-agent-{username}.log"));
         eprintln!(
             "NOC Agent: impossible d'écrire {} — repli sur {}",
             path.display(),

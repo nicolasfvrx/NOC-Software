@@ -84,7 +84,7 @@ Télécharger l’archive correspondant à la machine dans les
 | Application | Configuration | Guide détaillé |
 | --- | --- | --- |
 | Manager | `config.toml` dans son dossier de travail ; données dans `kiosks.json` et `commands.json`. | [NOC Manager](noc-manager/README.md) |
-| Agent | `~/.config/kiosk-agent/config.toml` ; URL de Manager et chemins des images/wrapper Firefox. | [NOC Agent](noc-agent/README.md) |
+| Agent | `~/.config/noc-agent/config.toml` ; URL de Manager et chemins des images/wrapper Firefox. | [NOC Agent](noc-agent/README.md) |
 | Display | `%USERPROFILE%/config.toml` pour chaque compte Windows ; serveur, compte et identifiants RDP. Images à côté de l’EXE. | [NOC Display](noc-display/README.md) |
 
 Commencer par Manager, configurer les comptes kiosques, installer l’agent dans
@@ -92,8 +92,11 @@ chaque session Linux, puis configurer Display pour ouvrir ces sessions.
 L’agent utilise **Firefox Flatpak**, **geckodriver** et une session graphique.
 Choisir son service systemd utilisateur ou l’autostart ; ne pas activer les deux.
 
-Les chemins historiques `kiosk-agent` et `.display-client` restent utilisés pour
-préserver les configurations, les profils Firefox et les secrets déjà installés.
+Le chemin historique `.display-client` reste utilisé pour préserver les
+identifiants DPAPI déjà provisionnés. Côté Agent, les chemins ont été renommés
+de `kiosk-agent` vers `noc-agent` (aucun repli automatique) : migrer à la main
+la configuration, le profil Firefox et l'état d'une installation existante —
+voir le [README de NOC Agent](noc-agent/README.md).
 
 ## Plateformes et builds
 

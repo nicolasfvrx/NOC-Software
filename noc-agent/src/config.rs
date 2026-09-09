@@ -140,10 +140,10 @@ fn d_app_id() -> String {
     "org.mozilla.firefox".into()
 }
 fn d_profile_dir() -> String {
-    "~/.var/app/org.mozilla.firefox/kiosk-agent-profile".into()
+    "~/.var/app/org.mozilla.firefox/noc-agent-profile".into()
 }
 fn d_logfile() -> String {
-    "kiosk-agent.log".into()
+    "noc-agent.log".into()
 }
 
 impl Default for UiConfig {
@@ -238,19 +238,19 @@ pub fn home_dir() -> Option<PathBuf> {
 pub fn find_config_file() -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
-    if let Some(explicit) = std::env::var_os("KIOSK_AGENT_CONFIG") {
+    if let Some(explicit) = std::env::var_os("NOC_AGENT_CONFIG") {
         candidates.push(PathBuf::from(explicit));
     }
     candidates.push(PathBuf::from("config.toml"));
     if let Some(home) = home_dir() {
-        candidates.push(home.join(".config/kiosk-agent/config.toml"));
+        candidates.push(home.join(".config/noc-agent/config.toml"));
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             candidates.push(dir.join("config.toml"));
         }
     }
-    candidates.push(PathBuf::from("/etc/kiosk-agent/config.toml"));
+    candidates.push(PathBuf::from("/etc/noc-agent/config.toml"));
 
     candidates.into_iter().find(|p| p.is_file())
 }
@@ -264,9 +264,9 @@ pub struct Loaded {
 
 pub fn load() -> Result<Loaded, String> {
     let file = find_config_file().ok_or_else(|| {
-        "config.toml introuvable (cherché dans : $KIOSK_AGENT_CONFIG, ./config.toml, \
-         ~/.config/kiosk-agent/config.toml, <dossier du binaire>/config.toml, \
-         /etc/kiosk-agent/config.toml)"
+        "config.toml introuvable (cherché dans : $NOC_AGENT_CONFIG, ./config.toml, \
+         ~/.config/noc-agent/config.toml, <dossier du binaire>/config.toml, \
+         /etc/noc-agent/config.toml)"
             .to_string()
     })?;
     let raw = std::fs::read_to_string(&file)

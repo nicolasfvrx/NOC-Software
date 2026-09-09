@@ -71,15 +71,15 @@ cargo +stable build --release --locked --target x86_64-unknown-linux-gnu
 Extraire l’archive, puis se placer dans son dossier :
 
 ```bash
-sudo install -Dm755 noc-agent /opt/kiosk-agent/noc-agent
-sudo install -Dm755 firefox-flatpak-wrapper.sh /opt/kiosk-agent/firefox-flatpak-wrapper.sh
-sudo install -Dm644 assets/background.jpg /opt/kiosk-agent/assets/background.jpg
-sudo install -Dm644 assets/logo.png /opt/kiosk-agent/assets/logo.png
+sudo install -Dm755 noc-agent /opt/noc-agent/noc-agent
+sudo install -Dm755 firefox-flatpak-wrapper.sh /opt/noc-agent/firefox-flatpak-wrapper.sh
+sudo install -Dm644 assets/background.jpg /opt/noc-agent/assets/background.jpg
+sudo install -Dm644 assets/logo.png /opt/noc-agent/assets/logo.png
 sudo install -Dm644 noc-agent.desktop /usr/local/share/applications/noc-agent.desktop
 sudo install -Dm644 assets/logo.png /usr/local/share/pixmaps/noc-agent.png
-mkdir -p ~/.config/kiosk-agent
+mkdir -p ~/.config/noc-agent
 # Première installation uniquement ; conserver la configuration si elle existe.
-test -f ~/.config/kiosk-agent/config.toml || cp config.example.toml ~/.config/kiosk-agent/config.toml
+test -f ~/.config/noc-agent/config.toml || cp config.example.toml ~/.config/noc-agent/config.toml
 ```
 
 Adapter l’URL du Manager et les chemins des images/wrapper dans la configuration.

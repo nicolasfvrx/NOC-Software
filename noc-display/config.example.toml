@@ -1,4 +1,10 @@
-﻿[rdp]
+﻿# Placer ce fichier sous ce nom (config.toml) soit dans %USERPROFILE% (config
+# propre à un compte Windows, prioritaire), soit à côté de noc-display.exe
+# (config globale, partagée par tous les comptes de la machine — repli si le
+# compte n'a pas son propre fichier). Avec [manager] provides_rdp = true
+# ci-dessous, un seul fichier global suffit pour toute la machine.
+
+[rdp]
 enabled = true
 server = "192.168.10.50"
 port = 3389

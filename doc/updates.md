@@ -57,7 +57,7 @@ installation. Il ne termine jamais les processus des autres utilisateurs.
   et 24.04. Aucun module Python externe n’est nécessaire.
 - Le compte qui lance l’application doit pouvoir écrire dans le dossier du
   binaire et y créer `.noc-updates/`. Sous Linux, il doit aussi pouvoir conserver
-  le propriétaire/groupe du fichier. Une installation `/opt/kiosk-agent` détenue
+  le propriétaire/groupe du fichier. Une installation `/opt/noc-agent` détenue
   par root reste en lecture seule pour un agent ordinaire : installer sous le compte
   de service voulu, ou effectuer ses mises à jour avec le compte propriétaire.
   Le mécanisme n’exécute ni `sudo`, ni élévation UAC, ni changement global de droits.

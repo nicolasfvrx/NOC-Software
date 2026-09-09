@@ -104,7 +104,7 @@ struct StateFile {
     last_command_id: u64,
 }
 
-/// Petite abstraction sur ~/.local/state/kiosk-agent/state.json.
+/// Petite abstraction sur ~/.local/state/noc-agent/state.json.
 /// Ecriture atomique (fichier .tmp puis rename) pour ne jamais corrompre
 /// le fichier en cas d'arret brutal.
 pub struct CommandStore {
@@ -165,7 +165,7 @@ fn state_file_path() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| crate::config::home_dir().map(|h| h.join(".local/state")))
         .unwrap_or_else(std::env::temp_dir);
-    dir.join("kiosk-agent").join("state.json")
+    dir.join("noc-agent").join("state.json")
 }
 
 // -------------------------------------------------------------------- API

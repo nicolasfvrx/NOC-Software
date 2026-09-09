@@ -18,8 +18,15 @@ Pour une installation existante utilisant systemd, arrêter et désactiver
 `kiosk-agent.service` avant d’activer `noc-agent.service`. Supprimer également
 l’ancien autostart `~/.config/autostart/kiosk-agent.desktop` s’il existe.
 Choisir soit le service, soit l’autostart, pour éviter deux instances.
-Les chemins historiques de configuration, de profil Firefox et d’état sont
-conservés, notamment pour éviter de rejouer une ancienne commande distante.
+
+Les chemins de configuration, de profil Firefox et d’état ont été renommés
+de `kiosk-agent` vers `noc-agent` (`~/.config/noc-agent/`, `/opt/noc-agent/`,
+`/etc/noc-agent/`, `noc-agent.log`, `~/.local/state/noc-agent/`,
+`$NOC_AGENT_CONFIG`) : **aucun repli automatique** vers les anciens chemins.
+Sur une installation existante, migrer les fichiers à la main
+(`cp -r ~/.config/kiosk-agent ~/.config/noc-agent`, etc.) avant de mettre à
+jour le binaire, sous peine de perdre la configuration, le profil Firefox et
+l’identifiant de la dernière commande distante traitée.
 
 Agent kiosque pour **Zorin OS / Ubuntu**, execute dans chaque session
 **xRDP / XFCE**. Projet Rust **independant de NOC Manager** (qui, lui,
@@ -83,7 +90,7 @@ noc-agent/
     ├── webdriver.rs   session WebDriver + detection de page prete
     ├── scheduler.rs   restart_cron
     ├── ui.rs          fenetre de statut + pont thread-safe
-    └── logging.rs     kiosk-agent.log
+    └── logging.rs     noc-agent.log
 ```
 
 Binaire produit : **`noc-agent`**.
@@ -112,10 +119,10 @@ automatiquement avec le nom de l'utilisateur Linux courant.
 
 ```bash
 # 1. Binaire + assets partages
-sudo install -Dm755 target/release/noc-agent /opt/kiosk-agent/noc-agent
-sudo install -Dm755 firefox-flatpak-wrapper.sh /opt/kiosk-agent/firefox-flatpak-wrapper.sh
-sudo install -Dm644 assets/background.jpg /opt/kiosk-agent/assets/background.jpg
-sudo install -Dm644 assets/logo.png       /opt/kiosk-agent/assets/logo.png
+sudo install -Dm755 target/release/noc-agent /opt/noc-agent/noc-agent
+sudo install -Dm755 firefox-flatpak-wrapper.sh /opt/noc-agent/firefox-flatpak-wrapper.sh
+sudo install -Dm644 assets/background.jpg /opt/noc-agent/assets/background.jpg
+sudo install -Dm644 assets/logo.png       /opt/noc-agent/assets/logo.png
 
 # 2. Firefox : deja installe via Flathub
 flatpak list --app | grep org.mozilla.firefox
@@ -133,25 +140,25 @@ sudo apt install -y geckodriver          # Zorin/Ubuntu recents
 geckodriver --version
 
 # 4. Configuration (par utilisateur kiosque)
-mkdir -p ~/.config/kiosk-agent
-cp config.example.toml ~/.config/kiosk-agent/config.toml
-$EDITOR ~/.config/kiosk-agent/config.toml     # renseigner manager.url
+mkdir -p ~/.config/noc-agent
+cp config.example.toml ~/.config/noc-agent/config.toml
+$EDITOR ~/.config/noc-agent/config.toml     # renseigner manager.url
 ```
 
-Dans `~/.config/kiosk-agent/config.toml`, pointer les chemins partages :
+Dans `~/.config/noc-agent/config.toml`, pointer les chemins partages :
 
 ```toml
 [ui]
-background = "/opt/kiosk-agent/assets/background.jpg"
-logo       = "/opt/kiosk-agent/assets/logo.png"
+background = "/opt/noc-agent/assets/background.jpg"
+logo       = "/opt/noc-agent/assets/logo.png"
 
 [firefox]
-wrapper = "/opt/kiosk-agent/firefox-flatpak-wrapper.sh"
+wrapper = "/opt/noc-agent/firefox-flatpak-wrapper.sh"
 ```
 
 Ordre de recherche de `config.toml` :
-`$KIOSK_AGENT_CONFIG` → `./config.toml` → `~/.config/kiosk-agent/config.toml`
-→ `<dossier du binaire>/config.toml` → `/etc/kiosk-agent/config.toml`.
+`$NOC_AGENT_CONFIG` → `./config.toml` → `~/.config/noc-agent/config.toml`
+→ `<dossier du binaire>/config.toml` → `/etc/noc-agent/config.toml`.
 
 ## 5. Autostart XFCE / xRDP
 
@@ -243,7 +250,7 @@ journalise le composant manquant et reessaie periodiquement.
 ### Profil Firefox persistant
 
 `profile_dir` (defaut
-`~/.var/app/org.mozilla.firefox/kiosk-agent-profile`) est reutilise a
+`~/.var/app/org.mozilla.firefox/noc-agent-profile`) est reutilise a
 chaque lancement : cookies, session Grafana, preferences et certificats
 sont conserves. Pas de navigation privee, pas de suppression du profil.
 Le chemin doit rester accessible depuis le bac a sable Flatpak — d'ou
@@ -332,7 +339,7 @@ les `manager.retry_seconds` secondes.
 
 ## 11. Logs
 
-Fichier `kiosk-agent.log` (chemin dans `[log] file`, relatif au dossier de
+Fichier `noc-agent.log` (chemin dans `[log] file`, relatif au dossier de
 `config.toml` ; repli sur `/tmp` si le dossier n'est pas inscriptible).
 Format : `date heure [username] ETAT message`, egalement repris sur stdout.
 
@@ -395,7 +402,7 @@ Sans commande : `{ "command": null }`.
 ### Anti-double-execution
 
 Chaque commande porte un **id numerique unique**. Le dernier id traite est
-persiste dans `~/.local/state/kiosk-agent/state.json`
+persiste dans `~/.local/state/noc-agent/state.json`
 (`$XDG_STATE_HOME` respecte si defini) :
 
 ```json
@@ -485,7 +492,7 @@ REMOTE_COMMAND id=43 action=restart_agent received
 REMOTE_COMMAND id=43 saved locally
 REMOTE_COMMAND id=43 ack success
 AGENT_RESTART cleanup begin
-AGENT_RESTART re-exec /opt/kiosk-agent/noc-agent
+AGENT_RESTART re-exec /opt/noc-agent/noc-agent
 ```
 
 ## 15. Service systemd utilisateur

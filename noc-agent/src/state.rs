@@ -27,7 +27,7 @@ pub enum KioskState {
 }
 
 impl KioskState {
-    /// Code court utilise dans kiosk-agent.log.
+    /// Code court utilise dans noc-agent.log.
     pub fn code(self) -> &'static str {
         use KioskState::*;
         match self {

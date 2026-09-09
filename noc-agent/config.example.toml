@@ -1,6 +1,6 @@
-# KioskAgent — configuration locale
+# NOC Agent — configuration locale
 # Copier ce fichier en config.toml a cote du binaire,
-# ou dans ~/.config/kiosk-agent/config.toml
+# ou dans ~/.config/noc-agent/config.toml
 
 [manager]
 # URL de KioskManager (qui tourne sous Windows)
@@ -38,7 +38,7 @@ retry_seconds = 10
 #
 # Profil Firefox PERSISTANT (cookies, session Grafana, certificats).
 # Doit rester dans un dossier accessible depuis le bac a sable Flatpak.
-# profile_dir = "~/.var/app/org.mozilla.firefox/kiosk-agent-profile"
+# profile_dir = "~/.var/app/org.mozilla.firefox/noc-agent-profile"
 #
 # Pause entre l'arret et la relance de Firefox
 # restart_delay_seconds = 3
@@ -61,4 +61,4 @@ timeout_seconds = 10
 
 [log]
 # Chemin relatif = a cote de config.toml
-file = "kiosk-agent.log"
+file = "noc-agent.log"

@@ -4,8 +4,8 @@ After=network-online.target graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/opt/kiosk-agent/noc-agent
-WorkingDirectory=/opt/kiosk-agent
+ExecStart=/opt/noc-agent/noc-agent
+WorkingDirectory=/opt/noc-agent
 Restart=always
 RestartSec=2
 

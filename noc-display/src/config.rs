@@ -101,11 +101,32 @@ impl Config {
             })?;
         Ok(profile.join("config.toml"))
     }
+    /// Config partagee par tous les comptes de la machine, a cote de l'exe.
+    /// Repli quand aucun `config.toml` par compte n'existe : avec la
+    /// gestion centralisee (`[manager]`), un seul fichier ici suffit pour
+    /// toute la machine, sans rien a creer par compte Windows.
+    pub fn global_path() -> std::io::Result<PathBuf> {
+        let exe = std::env::current_exe()?;
+        let dir = exe.parent().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Dossier de l'exécutable indisponible",
+            )
+        })?;
+        Ok(dir.join("config.toml"))
+    }
     pub fn read() -> Result<Self, String> {
-        let path = Self::path().map_err(|_| "Dossier de configuration indisponible")?;
+        let path = Self::path()
+            .ok()
+            .filter(|p| p.is_file())
+            .or_else(|| Self::global_path().ok().filter(|p| p.is_file()))
+            .ok_or(
+                "config.toml introuvable (ni dans le profil de l'utilisateur, \
+                 ni à côté de noc-display.exe)",
+            )?;
         let mut bytes = Vec::new();
         std::fs::File::open(path)
-            .map_err(|_| "config.toml absent ou illisible")?
+            .map_err(|_| "config.toml présent mais illisible")?
             .take(65_537)
             .read_to_end(&mut bytes)
             .map_err(|_| "Lecture config.toml impossible")?;
