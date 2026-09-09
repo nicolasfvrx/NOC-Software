@@ -16,6 +16,14 @@ $dist = Join-Path $nocRoot 'dist'
 # A fresh staging directory avoids shipping files left over from an earlier build.
 $stage = Join-Path ([IO.Path]::GetTempPath()) ("noc-package-" + [Guid]::NewGuid().ToString('N'))
 $package = Join-Path $stage $label
+$suiteVersion = (Get-Content -LiteralPath (Join-Path $nocRoot 'VERSION') -Raw).Trim()
+if ($env:GITHUB_REF_TYPE -eq 'tag') { $suiteVersion = $env:GITHUB_REF_NAME.TrimStart('v') }
+if ($suiteVersion -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[A-Za-z0-9][A-Za-z0-9.-]*)?$') { throw 'Invalid suite version.' }
+$previousSuiteVersion = $env:NOC_SUITE_VERSION
+$previousAsset = $env:NOC_UPDATE_ASSET
+$env:NOC_SUITE_VERSION = $suiteVersion
+# Identical binary for both Server targets: the raw executable asset has no server suffix.
+$env:NOC_UPDATE_ASSET = "$App.exe"
 
 Push-Location $project
 try {
@@ -76,6 +84,13 @@ try {
     New-Item -ItemType Directory -Path $dist -Force | Out-Null
     Compress-Archive -LiteralPath $package -DestinationPath (Join-Path $dist "$label.zip") -Force
     Write-Host "Package: $dist/$label.zip"
+    if ($Server -eq '2012') {
+        # Server 2012/2016 share the same binary; publish it once as a raw asset for the auto-updater.
+        Copy-Item -LiteralPath $binary -Destination (Join-Path $dist "$App.exe") -Force
+        Write-Host "Package: $dist/$App.exe"
+    }
 } finally {
     Pop-Location
+    $env:NOC_SUITE_VERSION = $previousSuiteVersion
+    $env:NOC_UPDATE_ASSET = $previousAsset
 }

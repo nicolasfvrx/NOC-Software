@@ -1,5 +1,7 @@
 # Compiler les applications NOC
 
+Voir aussi la [mise à jour automatique au démarrage](updates.md).
+
 | Application | Plateforme cible | Guide |
 | --- | --- | --- |
 | NOC Manager | Windows Server 2012 et 2016, x64 | [Windows](windows.md) |

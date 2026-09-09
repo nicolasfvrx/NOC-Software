@@ -16,6 +16,11 @@ assets=(
     release-assets/noc-display-windows-server-2016-x64.zip
     release-assets/noc-agent-ubuntu-22.04-x64.tar.gz
     release-assets/noc-agent-ubuntu-24.04-x64.tar.gz
+    # Raw executables consumed directly by the auto-updater (no archive to open).
+    release-assets/noc-manager.exe
+    release-assets/noc-display.exe
+    release-assets/noc-agent-ubuntu-22.04-x64
+    release-assets/noc-agent-ubuntu-24.04-x64
 )
 for asset in "${assets[@]}"; do
     [[ -s "$asset" ]] || { echo "Missing or empty package: $asset" >&2; exit 1; }
@@ -38,4 +43,4 @@ fi
 # Keep incomplete uploads in a draft; a retry can finish that same draft.
 gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
 gh release edit "$RELEASE_TAG" --draft=false
-echo "Published NOC $RELEASE_TAG with all six packages."
+echo "Published NOC $RELEASE_TAG with all ten packages."

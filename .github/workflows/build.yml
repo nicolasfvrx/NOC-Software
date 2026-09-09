@@ -2,7 +2,7 @@ name: Build NOC applications
 
 on:
   push:
-  pull_request:
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -67,6 +67,14 @@ jobs:
           path: dist/${{ matrix.app }}-windows-server-${{ matrix.server }}-x64.zip
           if-no-files-found: error
           retention-days: 30
+      - name: Upload raw executable for the auto-updater
+        if: matrix.server == '2012'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-exe
+          path: dist/${{ matrix.app }}.exe
+          if-no-files-found: error
+          retention-days: 30
 
   release:
     name: Publish GitHub release
@@ -118,5 +126,12 @@ jobs:
         with:
           name: noc-agent-${{ matrix.os }}-x64
           path: dist/noc-agent-${{ matrix.os }}-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload raw executable for the auto-updater
+        uses: actions/upload-artifact@v4
+        with:
+          name: noc-agent-${{ matrix.os }}-x64-exe
+          path: dist/noc-agent-${{ matrix.os }}-x64
           if-no-files-found: error
           retention-days: 30

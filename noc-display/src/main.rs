@@ -14,6 +14,8 @@ mod state;
 mod status;
 mod text;
 mod window;
+#[path = "../../shared/update.rs"]
+mod startup_update;
 
 use logging::write as log_error;
 use std::path::PathBuf;
@@ -30,6 +32,9 @@ fn executable_dir() -> std::io::Result<PathBuf> {
 }
 
 fn main() {
+    if startup_update::run("noc-display", "noc-display.exe") {
+        return;
+    }
     // OLE STA lifetime outlives every ActiveX, WIC and Direct2D object.
     unsafe {
         if std::env::args().any(|arg| arg == "--set-credentials") {

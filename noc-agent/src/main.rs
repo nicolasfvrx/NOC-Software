@@ -14,11 +14,14 @@ mod scheduler;
 mod state;
 mod ui;
 mod webdriver;
+#[path = "../../shared/update.rs"]
+mod startup_update;
 
 use eframe::egui;
 use std::sync::Arc;
 
 fn main() -> eframe::Result<()> {
+    startup_update::run("noc-agent", "noc-agent-ubuntu-22.04-x64");
     if std::env::args().any(|arg| arg == "--version" || arg == "-V") {
         println!("NOC Agent {} — Norfair Operation Center", env!("CARGO_PKG_VERSION"));
         return Ok(());

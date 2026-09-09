@@ -4,8 +4,9 @@ Le workflow est dans `.github/workflows/build.yml`. Placer **la racine NOC** à 
 racine du dépôt GitHub, avec `noc-manager/`, `noc-display/`, `noc-agent/`, `scripts/`
 et `doc/`. Les fichiers `Cargo.lock` doivent être versionnés.
 
-Déclenchements : push sur toute branche ou tag, pull request et lancement manuel
-via **Actions → Build NOC applications → Run workflow**.
+Déclenchements : push d’un tag `v*` uniquement, ou lancement manuel via
+**Actions → Build NOC applications → Run workflow**. Un push sur une branche
+(y compris `main`) ou une pull request ne déclenche aucun build.
 
 ## Matrice et résultats
 
@@ -49,20 +50,22 @@ le résumé, celui-ci peut ne pas être généré.
 ## Releases automatiques
 
 Un push d’un tag `v1.0.0` déclenche les six builds, puis crée automatiquement une
-release **NOC v1.0.0** contenant les six archives. Aucune release à créer au préalable.
-Un tag avec suffixe, par exemple `v1.1.0-rc.1`, produit une préversion GitHub.
-Utiliser le format `vMAJEUR.MINEUR.CORRECTIF`, avec un suffixe facultatif.
+release **NOC v1.0.0** contenant les six archives d’installation et les quatre
+exécutables bruts utilisés par la mise à jour automatique. Aucune release à créer
+au préalable. Un tag avec suffixe, par exemple `v1.1.0-rc.1`, produit une préversion
+GitHub. Utiliser le format `vMAJEUR.MINEUR.CORRECTIF`, avec un suffixe facultatif.
 
 La publication attend la réussite de **tous** les builds Windows et Linux. Le job
-crée d’abord un brouillon avec les notes générées par GitHub, ajoute les six paquets,
-puis publie. Une erreur d’envoi laisse le brouillon à reprendre en relançant le job.
-Une release déjà publiée est conservée telle quelle lors d’une relance : aucune
-archive publiée n’est remplacée. Pour corriger une version publiée, créer un nouveau tag.
+crée d’abord un brouillon avec les notes générées par GitHub, ajoute les dix
+paquets, puis publie. Une erreur d’envoi laisse le brouillon à reprendre en
+relançant le job. Une release déjà publiée est conservée telle quelle lors d’une
+relance : aucune archive publiée n’est remplacée. Pour corriger une version
+publiée, créer un nouveau tag.
 
-Les pushes de branche, pull requests et lancements manuels produisent uniquement
-les artifacts. Pour reprendre une publication interrompue, utiliser **Re-run failed
-jobs** sur l’exécution déclenchée par le tag ; un lancement manuel ne publie pas.
-Si les artifacts ont expiré, relancer tous les jobs de cette exécution.
+Un lancement manuel (`workflow_dispatch`) produit uniquement les artifacts, sans
+publier de release. Pour reprendre une publication interrompue, utiliser **Re-run
+failed jobs** sur l’exécution déclenchée par le tag. Si les artifacts ont expiré,
+relancer tous les jobs de cette exécution.
 
 Seul le job de publication reçoit `contents: write`. Il utilise le `GITHUB_TOKEN`
 fourni par GitHub, sans PAT à configurer. Les jobs de build restent en lecture seule.

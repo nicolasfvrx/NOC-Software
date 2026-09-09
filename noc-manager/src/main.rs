@@ -7,6 +7,8 @@ mod config;
 mod models;
 mod storage;
 mod web;
+#[path = "../../shared/update.rs"]
+mod startup_update;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -24,6 +26,9 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
+    if startup_update::run("noc-manager", "noc-manager.exe") {
+        return;
+    }
     if std::env::args().any(|arg| arg == "--version" || arg == "-V") {
         println!("NOC Manager {} — Norfair Operation Center", env!("CARGO_PKG_VERSION"));
         return;

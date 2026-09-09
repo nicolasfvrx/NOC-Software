@@ -11,8 +11,12 @@ use crate::{
     status::Status,
     window::Window,
 };
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use windows::{core::*, Win32::UI::WindowsAndMessaging::*};
+
+/// Delay before the first RDP connection attempt, so the branded startup
+/// frame is visible for a moment instead of connecting instantly.
+const STARTUP_DELAY: Duration = Duration::from_secs(8);
 
 pub struct App {
     window: Window,
@@ -54,6 +58,13 @@ impl App {
             transport_connected: false,
             ready_timer: None,
         })
+    }
+    fn schedule_first_attempt(&mut self) {
+        self.machine.retry_at = Some(Instant::now() + STARTUP_DELAY);
+        crate::log_error(format!(
+            "RDP first attempt delayed {} seconds",
+            STARTUP_DELAY.as_secs()
+        ));
     }
     fn attempt(&mut self) {
         self.cancel_ready_timer();
@@ -311,7 +322,7 @@ pub fn run() -> Result<()> {
         env!("DISPLAYCLIENT_BUILD_TIME")
     ));
     let mut app = App::new()?;
-    app.attempt();
+    app.schedule_first_attempt();
     unsafe {
         let mut message = MSG::default();
         while !app.window.context.quit.get() {

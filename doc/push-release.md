@@ -47,15 +47,17 @@ git commit -m "Describe the changes"
 git push origin main
 ```
 
-Cela déclenche les builds et crée des artifacts téléchargeables dans **Actions**.
-Cela ne crée pas encore de release. Si la branche est protégée, pousser une branche
-de travail et passer par une pull request. Si un push est rejeté car le dépôt a
-avancé, récupérer et intégrer les modifications avant de réessayer ; ne pas forcer
-le push pour contourner ce rejet.
+Un push sur `main` ne déclenche aucun build : seuls les tags `v*` et le lancement
+manuel (**Actions → Build NOC applications → Run workflow**) le font. Pour vérifier
+les builds avant de taguer, lancer le workflow manuellement sur `main`. Si la
+branche est protégée, pousser une branche de travail et passer par une pull
+request. Si un push est rejeté car le dépôt a avancé, récupérer et intégrer les
+modifications avant de réessayer ; ne pas forcer le push pour contourner ce rejet.
 
 ## Publier une release
 
-Après avoir envoyé le code et vérifié les builds de `main` :
+Après avoir envoyé le code, et éventuellement vérifié les builds de `main` via un
+lancement manuel :
 
 ```powershell
 git switch main
@@ -73,7 +75,8 @@ commande ci-dessus, plutôt que tous les tags locaux.
 
 Dans **Actions → Build NOC applications**, ouvrir l’exécution du tag. Lorsque les
 six builds et le job **Publish GitHub release** réussissent, la page **Releases**
-contient **NOC v1.0.0**, les notes automatiques et les six archives téléchargeables.
+contient **NOC v1.0.0**, les notes automatiques, les six archives d’installation
+et les quatre exécutables bruts utilisés par la mise à jour automatique.
 Ne pas créer la release à la main avant l’exécution.
 
 Pour la version suivante, utiliser un nouveau tag, par exemple :

@@ -83,6 +83,11 @@ préserver les configurations, les profils Firefox et les secrets déjà install
 
 ## Plateformes et builds
 
+Les nouvelles versions des trois applications incluent une
+[mise à jour automatique au démarrage](doc/updates.md) depuis les releases stables.
+La configuration reste conservée et un échec de vérification laisse démarrer la
+version actuelle. Les premiers binaires équipés doivent être installés manuellement.
+
 | Application | Exécutable | Cibles de la CI |
 | --- | --- | --- |
 | NOC Manager | `noc-manager.exe` | Windows Server 2012 et 2016 x64 |
@@ -99,10 +104,11 @@ contrôles de paquet, elle ne simule pas une installation complète du NOC.
 - [GitHub Actions et publication automatique](doc/github-actions.md)
 - [Commandes Git : premier push, mises à jour, tags](doc/push-release.md)
 
-Un push de branche déclenche les builds. Un push de tag tel que **`v0.1.0`**
-déclenche également la création de la release après réussite des six builds,
-avec quatre archives Windows et deux archives Linux. Un suffixe comme
-`v0.2.0-rc.1` crée une préversion.
+Les builds ne se déclenchent que sur un push de tag tel que **`v0.1.0`**, ou
+manuellement via `workflow_dispatch`. Un tag stable déclenche aussi la création
+de la release après réussite des six builds, avec quatre archives d'installation
+Windows, deux archives Linux et quatre exécutables bruts pour la mise à jour
+automatique. Un suffixe comme `v0.2.0-rc.1` crée une préversion.
 
 Le tag représente la version de la **suite NOC**. Les versions internes restent
 indépendantes : Manager **0.1.0**, Display **0.1.0**, Agent **1.0.0** pour cette
@@ -127,6 +133,7 @@ métadonnées ou la commande `--version` des applications concernées.
 .github/workflows/   Builds et release GitHub
 doc/                Guides de compilation et publication
 scripts/            Scripts de build, packaging et publication
+shared/             Mise à jour au démarrage partagée entre les applications
 noc-manager/        Serveur d’administration Windows
 noc-agent/          Agent graphique Linux
 noc-display/        Client d’affichage RDP Windows
