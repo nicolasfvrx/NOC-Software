@@ -54,8 +54,8 @@ et les mêmes exécutables, avec une configuration d’affichage par utilisateur
 
 - `restart_browser` : l’agent remet son écran de statut au premier plan, ferme
   Firefox et recharge la page.
-- `restart_agent` : l’agent ferme le navigateur puis quitte ; le service
-  utilisateur systemd le relance avec `Restart=always`.
+- `restart_agent` : l’agent ferme le navigateur puis se relance lui-même
+  (même PID), sans dépendre de systemd ni de l’autostart.
 
 La planification `restart_cron` redémarre uniquement Firefox. L’agent conserve
 l’identifiant de la dernière commande traitée pour éviter de la rejouer.

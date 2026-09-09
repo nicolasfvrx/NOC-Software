@@ -9,6 +9,7 @@ use crate::scheduler::CronRestart;
 use crate::state::{loading_message, KioskState};
 use crate::ui::UiHandle;
 use crate::webdriver::{Browser, LaunchError, PageError};
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -142,7 +143,7 @@ pub async fn run(cfg: Config, base: PathBuf, username: String, ui: UiHandle) {
             Ok(LoadOutcome::Ready) => {}
             Ok(LoadOutcome::Interrupted(PendingAction::RestartAgent)) => {
                 cleanup_for_agent_restart(Some(browser), &cfg, &ui).await;
-                exit_for_systemd();
+                restart_self();
             }
             Ok(LoadOutcome::Interrupted(PendingAction::RestartBrowser)) => {
                 // Le chargement en cours est annule proprement.
@@ -203,7 +204,7 @@ pub async fn run(cfg: Config, base: PathBuf, username: String, ui: UiHandle) {
         // restart_agent est prioritaire sur tout le reste.
         if let Outcome::Remote(PendingAction::RestartAgent) = &outcome {
             cleanup_for_agent_restart(Some(browser), &cfg, &ui).await;
-            exit_for_systemd();
+            restart_self();
         }
         match &outcome {
             Outcome::FirefoxGone(reason) => {
@@ -386,7 +387,7 @@ async fn countdown(ui: &UiHandle, seconds: u64, remote: &RemoteControl, cfg: &Co
         match remote.take() {
             Some(PendingAction::RestartAgent) => {
                 cleanup_for_agent_restart(None, cfg, ui).await;
-                exit_for_systemd();
+                restart_self();
             }
             Some(PendingAction::RestartBrowser) => {
                 // Aucun navigateur a arreter : on repart immediatement sur
@@ -441,8 +442,24 @@ async fn cleanup_for_agent_restart(browser: Option<Browser>, cfg: &Config, ui: &
     sleep(Duration::from_millis(500)).await;
 }
 
-/// NOC Agent ne se relance JAMAIS lui-meme : il quitte, systemd relance.
-fn exit_for_systemd() -> ! {
-    logging::log("AGENT_RESTART", "exiting for systemd restart");
+/// NOC Agent se relance lui-meme via exec (memes PID/argv/environnement) :
+/// ca fonctionne aussi bien sous le service systemd (Restart=always, qui ne
+/// voit alors aucun arret a relancer) que sous l'autostart XFCE, qui ne
+/// relance jamais un processus termine.
+fn restart_self() -> ! {
+    // Le processus relance n'a pas besoin de revérifier les mises à jour.
+    std::env::set_var("NOC_SKIP_UPDATE", "noc-agent");
+    let exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(e) => {
+            logging::log("AGENT_RESTART", &format!("current_exe indisponible : {e}, exit(0)"));
+            std::process::exit(0);
+        }
+    };
+    logging::log("AGENT_RESTART", &format!("re-exec {}", exe.display()));
+    let error = std::process::Command::new(&exe)
+        .args(std::env::args_os().skip(1))
+        .exec();
+    logging::log("AGENT_RESTART", &format!("exec a échoué : {error}, exit(0)"));
     std::process::exit(0);
 }

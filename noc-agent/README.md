@@ -425,11 +425,15 @@ jamais une seconde instance de lui-meme ni de Firefox.
 
 Log `received` → id ecrit dans `state.json` **avant de quitter** → ACK →
 « Redemarrage de l'agent… / Reinitialisation de l'affichage » → arret
-propre de WebDriver / Firefox / geckodriver → sortie du processus avec le
-code 0.
+propre de WebDriver / Firefox / geckodriver → l'agent se relance
+**lui-meme** via `exec` (`Command::new(current_exe)...exec()`), memes
+PID/argv/environnement.
 
-NOC Agent **ne se relance pas lui-meme** (aucun `Command::new(current_exe)`) :
-c'est **systemd** qui le relance (§15).
+`exec` remplace l'image memoire du processus courant sans passer par le
+superviseur : le comportement est identique que l'agent tourne sous le
+service systemd (§15) ou sous l'autostart XFCE (§5), qui lui ne relance
+jamais un processus termine. La verification de mise a jour au demarrage
+est sautee une fois pour ce redemarrage (`NOC_SKIP_UPDATE`).
 
 ### Priorite et concurrence
 
@@ -479,13 +483,15 @@ REMOTE_COMMAND id=43 action=restart_agent received
 REMOTE_COMMAND id=43 saved locally
 REMOTE_COMMAND id=43 ack success
 AGENT_RESTART cleanup begin
-AGENT_RESTART exiting for systemd restart
+AGENT_RESTART re-exec /opt/kiosk-agent/noc-agent
 ```
 
 ## 15. Service systemd utilisateur
 
-`restart_agent` fait simplement **quitter** NOC Agent ; c'est systemd qui
-le relance (`Restart=always`, `RestartSec=2`).
+`restart_agent` relance l'agent lui-meme (`exec`, meme PID) : le service
+systemd n'est pas necessaire a son fonctionnement. Il reste utile pour
+relancer l'agent apres un **crash** (`Restart=always`, `RestartSec=2`),
+ce qu'un simple autostart ne fait jamais.
 
 ```bash
 mkdir -p ~/.config/systemd/user
