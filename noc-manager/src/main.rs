@@ -8,6 +8,8 @@ mod health;
 mod models;
 mod storage;
 mod web;
+#[path = "../../shared/version.rs"]
+mod suite_version;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -32,7 +34,10 @@ async fn main() {
     // instance, but this binary is shared by several concurrent sessions.
     // See doc/updates.md before re-enabling shared::update.
     if std::env::args().any(|arg| arg == "--version" || arg == "-V") {
-        println!("NOC Manager {} — Norfair Operation Center", env!("CARGO_PKG_VERSION"));
+        println!(
+            "NOC Manager {} — Norfair Operation Center",
+            suite_version::suite_version()
+        );
         return;
     }
     #[cfg(windows)]

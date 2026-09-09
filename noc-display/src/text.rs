@@ -122,10 +122,9 @@ impl TextRenderer {
                 size *= 0.85;
             };
             let margin = (height * 0.018).clamp(8.0, 24.0).min(width * 0.05);
-            let build_text: Vec<u16> = concat!(
-                "NOC Display v",
-                env!("CARGO_PKG_VERSION"),
-                " — Build ",
+            let build_text: Vec<u16> = format!(
+                "NOC Display v{} — Build {}",
+                crate::suite_version::suite_version(),
                 env!("DISPLAYCLIENT_BUILD_TIME")
             )
             .encode_utf16()

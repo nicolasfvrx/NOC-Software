@@ -365,7 +365,7 @@ impl eframe::App for KioskApp {
                 egui::Align2::RIGHT_TOP,
                 format!(
                     "NOC Agent v{} — Build {}",
-                    env!("CARGO_PKG_VERSION"),
+                    crate::suite_version::suite_version(),
                     env!("NOC_AGENT_BUILD_TIME")
                 ),
                 egui::FontId::monospace(info_size),

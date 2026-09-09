@@ -15,6 +15,8 @@ mod scheduler;
 mod state;
 mod ui;
 mod webdriver;
+#[path = "../../shared/version.rs"]
+mod suite_version;
 
 use eframe::egui;
 use std::sync::Arc;
@@ -24,7 +26,10 @@ fn main() -> eframe::Result<()> {
     // instance, but this binary is shared by several concurrent sessions.
     // See doc/updates.md before re-enabling shared::update.
     if std::env::args().any(|arg| arg == "--version" || arg == "-V") {
-        println!("NOC Agent {} — Norfair Operation Center", env!("CARGO_PKG_VERSION"));
+        println!(
+            "NOC Agent {} — Norfair Operation Center",
+            suite_version::suite_version()
+        );
         return Ok(());
     }
     let loaded = match config::load() {

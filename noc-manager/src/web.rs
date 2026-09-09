@@ -11,7 +11,6 @@ use crate::health::{self, Heartbeat};
 use crate::models::{Kiosk, PasswordAction, RdpConfig};
 use crate::AppState;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUILD_TIME: &str = env!("NOC_MANAGER_BUILD_TIME");
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -450,6 +449,7 @@ fn form_html(title: &str, action: &str, kiosk: Option<&Kiosk>, error: Option<&st
 }
 
 fn page(title: &str, body: &str) -> String {
+    let version = crate::suite_version::suite_version();
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -464,7 +464,7 @@ fn page(title: &str, body: &str) -> String {
 <body>
 <header>
   <a href="/">NOC Manager</a>
-  <span class="version">v{VERSION} • Build {BUILD_TIME}</span>
+  <span class="version">v{version} • Build {BUILD_TIME}</span>
 </header>
 <main>
 {body}

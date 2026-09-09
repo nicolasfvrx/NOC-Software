@@ -15,6 +15,8 @@ mod state;
 mod status;
 mod text;
 mod window;
+#[path = "../../shared/version.rs"]
+mod suite_version;
 
 use logging::write as log_error;
 use std::path::PathBuf;
