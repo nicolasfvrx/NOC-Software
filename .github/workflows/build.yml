@@ -114,6 +114,10 @@ jobs:
           persist-credentials: false
       - name: Install build dependencies
         run: |
+          # Pre-installed on the runner image, unused by this project (Firefox
+          # Flatpak, never Chrome) : a transient hash mismatch on Google's
+          # mirror shouldn't be able to fail our own apt-get update.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev \
             libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxinerama-dev \
