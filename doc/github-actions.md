@@ -28,6 +28,24 @@ compilation, de métadonnées Windows, d’imports contrôlés, de version CLI, 
 validation du lanceur Linux ou une bibliothèque Linux manquante fait échouer le job.
 Les autres entrées de la matrice continuent pour faciliter le diagnostic.
 
+## Récapitulatif de chaque exécution
+
+Le job **NOC build summary** s’exécute après les builds et la publication, même
+si un build échoue ou si la release est ignorée. Son résumé apparaît directement
+sur la page de l’exécution GitHub Actions. Il contient :
+
+- le commit, la branche ou le tag et le numéro de tentative ;
+- les six cibles, le résultat des builds/contrôles/paquets et celui du job complet ;
+- les archives disponibles, leur taille et leurs liens de téléchargement ;
+- les étapes en échec, annulées ou non exécutées, avec accès aux logs ;
+- la release publiée ou la raison pour laquelle elle n’a pas été publiée.
+
+Un build réussi suivi d’un échec d’envoi est distingué d’un échec de compilation.
+Les builds absents ne sont jamais présentés comme réussis. En cas de relance, le
+résumé utilise le dernier résultat connu de chaque job, y compris les jobs réussis
+d’une tentative précédente. Si GitHub interrompt tout le workflow avant de lancer
+le résumé, celui-ci peut ne pas être généré.
+
 ## Releases automatiques
 
 Un push d’un tag `v1.0.0` déclenche les six builds, puis crée automatiquement une

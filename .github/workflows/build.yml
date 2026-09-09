@@ -13,6 +13,33 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
+  summary:
+    name: NOC build summary
+    needs: [windows, linux, release]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Collect build results and write summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+        run: |
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" > jobs.json
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" > artifacts.json
+          python3 scripts/write-summary.py jobs.json artifacts.json
+      - name: Report summary collection failure
+        if: failure()
+        run: |
+          echo '## NOC — récapitulatif indisponible' >> "$GITHUB_STEP_SUMMARY"
+          echo 'La collecte des résultats a échoué. Consulter les jobs et leurs logs dans cette exécution.' >> "$GITHUB_STEP_SUMMARY"
+
   windows:
     name: ${{ matrix.app }} / Windows Server ${{ matrix.server }} x64
     runs-on: windows-2022
