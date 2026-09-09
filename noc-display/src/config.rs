@@ -6,6 +6,32 @@ use std::{io::Read, path::PathBuf};
 pub struct Config {
     pub rdp: RdpSettings,
     pub ui: UiSettings,
+    pub manager: ManagerSettings,
+}
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ManagerSettings {
+    /// Heartbeat desactive par defaut : NOC Display n'a historiquement
+    /// aucune dependance a NOC Manager (voir README).
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+    pub heartbeat_seconds: u32,
+    /// Si vrai, `[rdp] server/port/password/ignore_certificate_errors` sont
+    /// ignores : recuperes depuis Manager a chaque tentative de connexion,
+    /// via le nom du compte Windows courant (voir README).
+    pub provides_rdp: bool,
+}
+impl Default for ManagerSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: String::new(),
+            port: 8080,
+            heartbeat_seconds: 30,
+            provides_rdp: false,
+        }
+    }
 }
 #[derive(Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -109,7 +135,11 @@ impl Config {
                 return Err("Paramètre RDP invalide".into());
             }
         }
+        // When Manager provides the RDP connection settings, server/username
+        // arrive at connect time (looked up by the Windows account name) and
+        // are not required locally.
         if config.rdp.enabled
+            && !config.manager.provides_rdp
             && (config.rdp.server.trim().is_empty() || config.rdp.username.trim().is_empty())
         {
             return Err("Serveur et utilisateur RDP requis".into());
@@ -131,6 +161,14 @@ impl Config {
         ] {
             if text.is_empty() || text.len() > 2048 || text.contains('\0') {
                 return Err("Texte UI invalide".into());
+            }
+        }
+        if config.manager.enabled || config.manager.provides_rdp {
+            if config.manager.host.trim().is_empty() || config.manager.port == 0 {
+                return Err("Hôte et port NOC Manager requis (heartbeat ou RDP centralisé activé)".into());
+            }
+            if config.manager.host.len() > 1024 || config.manager.host.chars().any(char::is_control) {
+                return Err("Hôte NOC Manager invalide".into());
             }
         }
         Ok(config)

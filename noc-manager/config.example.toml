@@ -8,3 +8,8 @@ api_token = ""
 [data]
 file = "kiosks.json"
 commands_file = "commands.json"
+
+[health]
+# noc_up reports 0 in /metrics once a heartbeat is older than this.
+# Keep it a few times the agents'/displays' own heartbeat interval.
+stale_after_seconds = 90

@@ -1,5 +1,16 @@
 # Mise à jour automatique au démarrage
 
+> **Désactivée pour le moment.** Ce mécanisme suppose un binaire par instance
+> qui se relance elle-même. En déploiement réel, `noc-display.exe`/`noc-agent`
+> sont un seul fichier partagé par plusieurs sessions concurrentes : le
+> remplacer en place peut échouer (fichier verrouillé, surtout sous Windows)
+> et, même en cas de succès, les instances déjà lancées continuent de tourner
+> avec l'ancien code déjà chargé en mémoire. Les trois `main.rs` n'appellent
+> plus `startup_update::run()` ; le code de `shared/` reste dans le dépôt en
+> vue d'une refonte (installation versionnée + pointeur "current" basculé
+> atomiquement, à la Chrome/Firefox) avant réactivation. Le reste de cette
+> page décrit le fonctionnement tel que conçu, pas l'état actuel.
+
 NOC Manager, NOC Agent et NOC Display vérifient la dernière release stable de
 `nicolasfvrx/NOC-Software` avant de charger leur configuration ou de se connecter.
 La vérification utilise HTTPS et l’API GitHub. Elle n’effectue aucune mise à jour

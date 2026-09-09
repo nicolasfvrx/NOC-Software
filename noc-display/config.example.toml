@@ -16,3 +16,17 @@ disconnected_text = "Connexion interrompue"
 error_text = "Connexion impossible"
 reconnecting_text = "Nouvelle tentative dans {seconds} secondes"
 development_exit_enabled = true
+
+[manager]
+# Heartbeat optionnel vers NOC Manager (visible sur /metrics) ; désactivé
+# par défaut. Display n'a pas besoin de NOC Manager pour fonctionner.
+enabled = false
+host = "192.168.10.64"
+port = 8080
+heartbeat_seconds = 30
+# Si activé : [rdp] server/port/password/ignore_certificate_errors ci-dessus
+# sont ignorés et récupérés depuis Manager à chaque tentative de connexion,
+# via le compte du kiosque portant EXACTEMENT le même nom que le compte
+# Windows courant. Il suffit alors de garder rdp.enabled = true ci-dessus ;
+# server/username/password peuvent rester vides.
+provides_rdp = false

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::models::Kiosk;
+use crate::models::{Kiosk, PasswordAction};
 
 /// In-memory kiosk list, backed by a JSON file.
 pub struct Storage {
@@ -53,12 +53,24 @@ impl Storage {
         Self::write(&self.path, &kiosks)
     }
 
-    pub fn update(&self, previous_username: &str, kiosk: Kiosk) -> Result<(), String> {
+    /// `password` resolves under the same lock as the lookup/write, so a
+    /// concurrent update can never race with "keep the existing password".
+    pub fn update(
+        &self,
+        previous_username: &str,
+        mut kiosk: Kiosk,
+        password: PasswordAction,
+    ) -> Result<(), String> {
         let mut kiosks = self.kiosks.lock().unwrap();
         let index = kiosks
             .iter()
             .position(|k| k.username == previous_username)
             .ok_or_else(|| format!("kiosk '{previous_username}' not found"))?;
+        kiosk.rdp.password = match password {
+            PasswordAction::Keep => kiosks[index].rdp.password.clone(),
+            PasswordAction::Set(value) => Some(value),
+            PasswordAction::Clear => None,
+        };
         crate::models::validate(&kiosk, &kiosks, Some(previous_username))?;
         kiosks[index] = kiosk;
         Self::write(&self.path, &kiosks)

@@ -278,7 +278,9 @@ secondaire (detail de l'erreur, `{username}`, cause HTTP…) et une
 troisieme ligne dynamique (compte a rebours « Nouvelle tentative dans X
 secondes », progression `12 s / 60 s`, URL en cours…). Un bandeau bas
 rappelle en permanence l'utilisateur, l'etat courant et l'heure : il n'y
-a jamais d'ecran muet.
+a jamais d'ecran muet. En haut a droite, un bandeau discret affiche la
+version et la date de build (`NOC Agent v1.0.0 — Build 09/09/26 12:00`),
+utile pour verifier a l'oeil quel binaire tourne sur un poste.
 
 ### Messages progressifs de chargement
 
@@ -515,3 +517,21 @@ L'agent tourne dans la session XFCE/xRDP : si la session est detruite,
 NOC Agent s'arrete avec elle, ce qui est le comportement voulu. L'unite
 systemd utilisateur sert uniquement a le maintenir/relancer **tant que la
 session existe**.
+
+## 16. Heartbeat / supervision Prometheus
+
+L'agent envoie periodiquement (`manager.heartbeat_seconds`, defaut **30 s**)
+un `POST` vers `{manager}/api/heartbeat/agent/{username}` avec sa version,
+sa date de build et son etat courant (`KioskState::code()`, ex. `RUNNING`,
+`FIREFOX_CRASHED`). Volontairement leger : sur le meme modele que le
+polling de commandes, un echec ou un endpoint absent (404) est journalise
+**une seule fois** puis ignore, sans jamais bloquer le fonctionnement normal.
+
+```
+HEARTBEAT indisponible : HTTP 404 (fonctionnement normal maintenu)
+HEARTBEAT à nouveau disponible
+```
+
+Cote NOC Manager, ce heartbeat alimente `/metrics` (format Prometheus) et
+les colonnes **Agent**/**Display** de l'interface web — voir le
+[README de NOC Manager](../noc-manager/README.md#supervision-prometheus--grafana).

@@ -11,6 +11,8 @@ poll_seconds = 30
 retry_seconds = 10
 # Relecture des commandes distantes (restart_browser / restart_agent)
 command_poll_seconds = 5
+# Envoi du statut/version a KioskManager (visible sur /metrics)
+heartbeat_seconds = 30
 # Timeout des appels HTTP vers KioskManager
 timeout_seconds = 10
 

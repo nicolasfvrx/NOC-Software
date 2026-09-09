@@ -28,6 +28,7 @@ Usage prévu : réseau local uniquement.
 | `src/storage.rs` | chargement / écriture atomique de `kiosks.json` |
 | `src/api.rs` | API HTTP + token bearer optionnel |
 | `src/commands.rs` | commandes distantes (`commands.json`, queue / get / ack) |
+| `src/health.rs` | heartbeats agent/display en mémoire + rendu Prometheus (`/metrics`) |
 | `src/web.rs` | interface web (HTML/CSS générés en Rust) |
 | `rust-toolchain.toml` | pin Rust 1.77.2 (compatibilité Server 2012) |
 | `.cargo/config.toml` | CRT MSVC statique |
@@ -157,19 +158,41 @@ api_token = ""
 [data]
 file = "kiosks.json"
 commands_file = "commands.json"
+
+[health]
+stale_after_seconds = 90
 ```
 
 `api_token` vide = aucune authentification. S'il est renseigné, les routes `/api/*`
-exigent l'en-tête `Authorization: Bearer <token>` (l'interface web reste ouverte) ;
-reporter alors la même valeur dans `KIOSK_API_TOKEN` en haut de `kiosk.sh`.
+(dont `/metrics`) exigent l'en-tête `Authorization: Bearer <token>` (l'interface
+web reste ouverte) ; reporter alors la même valeur dans `KIOSK_API_TOKEN` en haut
+de `kiosk.sh`.
+
+`health.stale_after_seconds` : au-delà de ce délai sans heartbeat, `noc_up` passe
+à `0` dans `/metrics`. À garder à quelques fois l'intervalle de heartbeat des
+agents/displays eux-mêmes (par défaut 30 s côté client).
 
 ## Interface web
 
 `http://<serveur>:8080/`
 
-* liste des kiosques : Name, Username, URL, Enabled, Restart schedule, Edit, Delete
-* bouton **Add kiosk**
-* formulaire Add/Edit avec aide cron intégrée
+Liste des kiosques, organisée en deux groupes de colonnes :
+
+* **Kiosque** : Name, Username, URL, Enabled, Restart schedule
+* **Supervision** : Commande en attente, **Agent**, **Display** — dernier
+  heartbeat reçu (badge vert = récent, rouge/gris = absent ou périmé),
+  info-bulle avec version + build + état rapporté
+* en-tête de page : version et date de build de NOC Manager lui-même
+* la ligne d'actions (Edit / Redémarrer Firefox / Redémarrer l'agent /
+  Delete) défile horizontalement dans son propre cadre si l'écran est
+  étroit ; le reste de la page ne bouge pas
+
+Formulaire Add/Edit, en sections :
+
+* **Général** : name, username, url, enabled
+* **Planification du redémarrage** : restart_cron, avec aide cron intégrée
+* **RDP (NOC Display)** : voir [RDP centralisée (NOC Display)](#rdp-centralisée-noc-display)
+  ci-dessous pour le détail des champs et de l'UX du mot de passe
 
 Règles de validation :
 
@@ -177,6 +200,8 @@ Règles de validation :
 * `name` : obligatoire
 * `url` : obligatoire, doit commencer par `http://` ou `https://`
 * `restart_cron` : optionnel ; si présent, 5 champs cron
+* `rdp.server`/`rdp.port` : obligatoires si `rdp.enabled` ; `server` doit être
+  un nom DNS ou une IP, sans `://`, `@` ni `/`
 
 Chaque modification réécrit `kiosks.json` via un fichier temporaire renommé
 (écriture atomique), pour éviter toute corruption.
@@ -213,6 +238,78 @@ Kiosque inconnu — HTTP 404 :
 ```json
 { "error": "kiosk_not_found" }
 ```
+
+### `GET /api/kiosk/{username}/rdp`
+
+Endpoint **séparé** de `GET /api/kiosk/{username}` ci-dessus : celui-là est
+récupéré (et potentiellement loggé) par NOC Agent sur les postes Linux, il
+ne doit jamais transporter de mot de passe. `{username}` = le nom du compte
+Windows du poste NOC Display qui interroge (même valeur que `Kiosk.username`
+puisque l'utilisateur RDP est le même compte que le kiosque).
+
+```
+curl http://192.168.10.64:8080/api/kiosk/kiosk-noc-1/rdp
+```
+
+```json
+{
+  "enabled": true,
+  "server": "192.168.10.50",
+  "port": 3389,
+  "username": "kiosk-noc-1",
+  "password": "•••••••",
+  "ignore_certificate_errors": true
+}
+```
+
+`password` est `null` si aucun mot de passe n'est centralisé pour ce
+kiosque — Display retombe alors sur son DPAPI local. Kiosque inconnu — même
+`404 { "error": "kiosk_not_found" }` que ci-dessus.
+
+## RDP centralisée (NOC Display)
+
+Un kiosque Agent (compte Linux, URL Firefox) et sa connexion RDP Display
+visent la même chose : le compte Linux affiché. Pas d'identifiant séparé —
+`Kiosk.username` sert à la fois de compte Linux pour Agent et d'utilisateur
+de connexion RDP pour Display. Chaque poste NOC Display retrouve sa
+configuration en interrogeant `/api/kiosk/{username}/rdp` avec **le nom de
+son propre compte Windows** : le compte Windows d'un poste Display doit donc
+porter exactement le même nom que le `username` du kiosque dans Manager.
+
+Champs du formulaire d'édition (section « RDP (NOC Display) ») :
+
+* **Gérer la connexion RDP depuis Manager** (`rdp.enabled`) : interrupteur
+  principal
+* **Serveur RDP**, **Port** (défaut 3389)
+* **Ignorer les erreurs de certificat**
+* **Mot de passe** : centralisé, optionnel
+
+UX du mot de passe, pensée pour ne jamais l'exposer par accident :
+
+* jamais pré-rempli dans le formulaire, même en édition ;
+* laisser le champ **vide** = mot de passe inchangé (une simple relecture du
+  formulaire ne peut donc pas l'effacer par erreur) ;
+* case à cocher explicite **« Supprimer le mot de passe centralisé »** pour
+  l'effacer volontairement ;
+* un badge indique s'il y en a un actuellement, sans jamais afficher sa
+  valeur.
+
+**Compromis de sécurité assumé.** Sans mot de passe centralisé, Display
+utilise son identifiant DPAPI local (`--set-credentials`), chiffré et lié à
+la machine/au compte Windows — non transférable par le réseau. Centraliser
+le mot de passe dans Manager change ce modèle : le secret transite en clair
+sur le réseau (Manager ne sert qu'en HTTP) et est stocké en clair dans
+`kiosks.json`. Pour tout déploiement qui centralise des mots de passe RDP :
+
+* définir un `api_token` non vide dans `config.toml` (protège aussi
+  `/api/kiosk/{username}/rdp`, comme le reste de l'API) ;
+* envisager un reverse proxy TLS devant Manager si le réseau n'est pas
+  entièrement maîtrisé.
+
+La centralisation est adoptable kiosque par kiosque : ne pas définir de mot
+de passe pour un kiosque donné laisse ce poste continuer d'utiliser son
+DPAPI local, même avec `rdp.enabled` géré depuis Manager pour le reste
+(serveur/port/certificat).
 
 ## Commandes distantes
 
@@ -323,6 +420,56 @@ COMMAND fetched username=kiosk-noc-1 id=42
 COMMAND ack username=kiosk-noc-1 id=42
 COMMAND ack mismatch username=kiosk-noc-1 requested=41 pending=42
 ```
+
+## Supervision Prometheus / Grafana
+
+NOC Agent et NOC Display envoient chacun un heartbeat périodique (statut, version,
+build) ; NOC Manager le conserve en mémoire (pas de persistance : un redémarrage du
+Manager perd l'historique, sans impact puisque chaque instance se réannonce dans son
+propre intervalle) et l'expose en `/metrics` au format Prometheus.
+
+### `POST /api/heartbeat/{app}/{username}`
+
+`app` vaut `agent` ou `display`. N'exige pas que le kiosque existe déjà dans
+`kiosks.json` : la supervision fonctionne même pour une instance pas encore
+enregistrée. Body JSON, tous les champs optionnels :
+
+```
+curl -X POST -H "Content-Type: application/json" \
+     -d '{"version":"1.0.0","build":"09/09/26 12:00","state":"RUNNING"}' \
+     http://192.168.10.64:8080/api/heartbeat/agent/kiosk-noc-1
+```
+
+### `GET /metrics`
+
+```
+# HELP noc_up 1 if a heartbeat arrived within the staleness window, 0 otherwise.
+# TYPE noc_up gauge
+noc_up{app="agent",username="kiosk-noc-1"} 1
+# HELP noc_last_seen_seconds Unix timestamp of the last heartbeat received.
+# TYPE noc_last_seen_seconds gauge
+noc_last_seen_seconds{app="agent",username="kiosk-noc-1"} 1788912000
+# HELP noc_info Build metadata of the last heartbeat received. Value is always 1.
+# TYPE noc_info gauge
+noc_info{app="agent",username="kiosk-noc-1",version="1.0.0",build="09/09/26 12:00",state="RUNNING"} 1
+```
+
+Exemple de scrape config Prometheus :
+
+```yaml
+scrape_configs:
+  - job_name: noc-manager
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["192.168.10.64:8080"]
+    # Seulement si api_token est renseigné dans config.toml :
+    # authorization:
+    #   credentials: <token>
+```
+
+Dans Grafana, une requête `noc_up == 0` (ou `time() - noc_last_seen_seconds > seuil`)
+alerte sur un agent/display disparu ; `noc_info` donne les versions déployées par
+kiosque, utile pour repérer un poste resté sur une ancienne version.
 
 ## Côté Linux (Zorin / Ubuntu)
 

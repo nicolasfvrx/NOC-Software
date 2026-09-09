@@ -10,12 +10,14 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::commands::{self, CommandError, KioskCommand};
+use crate::health::{self, HeartbeatBody};
 use crate::AppState;
 
 pub fn router(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/health", get(health))
         .route("/api/kiosk/:username", get(kiosk))
+        .route("/api/kiosk/:username/rdp", get(kiosk_rdp))
         .route(
             "/api/kiosk/:username/command",
             get(get_command).post(post_command),
@@ -24,6 +26,8 @@ pub fn router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/kiosk/:username/command/:id/ack",
             post(ack_command),
         )
+        .route("/api/heartbeat/:app/:username", post(heartbeat))
+        .route("/metrics", get(metrics))
         .layer(axum::middleware::from_fn_with_state(state, auth))
 }
 
@@ -35,6 +39,30 @@ async fn kiosk(State(state): State<Arc<AppState>>, Path(username): Path<String>)
     match state.storage.get(&username) {
         // enabled=false is returned as-is: the kiosk script decides what to do.
         Some(kiosk) => Json(kiosk).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "kiosk_not_found" })),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /api/kiosk/{username}/rdp` - polled by NOC Display, keyed by the
+/// Windows account's own username (must match `Kiosk.username`). A
+/// deliberately separate endpoint from `GET /api/kiosk/{username}`: that
+/// one is fetched and potentially logged by NOC Agent, and should never
+/// carry an RDP password.
+async fn kiosk_rdp(State(state): State<Arc<AppState>>, Path(username): Path<String>) -> Response {
+    match state.storage.get(&username) {
+        Some(kiosk) => Json(json!({
+            "enabled": kiosk.rdp.enabled,
+            "server": kiosk.rdp.server,
+            "port": kiosk.rdp.port,
+            "username": kiosk.username,
+            "password": kiosk.rdp.password,
+            "ignore_certificate_errors": kiosk.rdp.ignore_certificate_errors,
+        }))
+        .into_response(),
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "kiosk_not_found" })),
@@ -113,6 +141,42 @@ async fn ack_command(
         Ok(()) => Json(json!({ "status": "acknowledged" })).into_response(),
         Err(error) => command_error(error),
     }
+}
+
+// --------------------------------------------------------------- heartbeats ---
+
+/// `POST /api/heartbeat/{app}/{username}` - polled periodically by the agent
+/// and the display client. Does not require the kiosk to exist in
+/// kiosks.json: health monitoring should work even for a not-yet-registered
+/// or orphaned instance.
+async fn heartbeat(
+    State(state): State<Arc<AppState>>,
+    Path((app, username)): Path<(String, String)>,
+    body: Result<Json<HeartbeatBody>, axum::extract::rejection::JsonRejection>,
+) -> Response {
+    if !health::is_allowed_app(&app) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "invalid_app", "allowed": health::APPS })),
+        )
+            .into_response();
+    }
+    let body = match body {
+        Ok(Json(body)) => body,
+        Err(_) => HeartbeatBody::default(),
+    };
+    state.health.record(&app, &username, body);
+    Json(json!({ "status": "ok" })).into_response()
+}
+
+/// `GET /metrics` - Prometheus text exposition format, for a Prometheus
+/// scrape job (from there, graph in Grafana).
+async fn metrics(State(state): State<Arc<AppState>>) -> Response {
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        health::render_prometheus(&state.health, state.health_stale_after_seconds),
+    )
+        .into_response()
 }
 
 /// Optional bearer-token check. Disabled when `api_token` is empty in config.toml.

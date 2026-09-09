@@ -1570,23 +1570,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
-name = "noc-agent"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "chrono",
- "cron",
- "eframe",
- "fantoccini",
- "image",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "toml",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1859,6 +1842,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c196769dd60fd4f363e11d948139556a344e79d451aeb2fa2fd040738ef7691"
 dependencies = [
  "jni-sys 0.3.1",
+]
+
+[[package]]
+name = "noc-agent"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cron",
+ "eframe",
+ "fantoccini",
+ "image",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
 ]
 
 [[package]]

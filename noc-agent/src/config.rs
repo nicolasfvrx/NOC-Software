@@ -29,6 +29,9 @@ pub struct ManagerConfig {
     /// Intervalle de relecture des commandes distantes.
     #[serde(default = "d_command_poll")]
     pub command_poll_seconds: u64,
+    /// Intervalle d'envoi du heartbeat (statut/version) a NOC Manager.
+    #[serde(default = "d_heartbeat")]
+    pub heartbeat_seconds: u64,
     /// Timeout des requetes HTTP vers NOC Manager.
     #[serde(default = "d_http_timeout")]
     pub timeout_seconds: u64,
@@ -102,6 +105,9 @@ fn d_retry() -> u64 {
 }
 fn d_command_poll() -> u64 {
     5
+}
+fn d_heartbeat() -> u64 {
+    30
 }
 fn d_http_timeout() -> u64 {
     10

@@ -5,6 +5,7 @@ mod app;
 mod assets;
 mod config;
 mod credentials;
+mod health;
 mod identity;
 mod logging;
 mod rdp;
@@ -14,8 +15,6 @@ mod state;
 mod status;
 mod text;
 mod window;
-#[path = "../../shared/update.rs"]
-mod startup_update;
 
 use logging::write as log_error;
 use std::path::PathBuf;
@@ -32,9 +31,9 @@ fn executable_dir() -> std::io::Result<PathBuf> {
 }
 
 fn main() {
-    if startup_update::run("noc-display", "noc-display.exe") {
-        return;
-    }
+    // Startup auto-update is disabled: it assumed one binary per running
+    // instance, but this binary is shared by several concurrent sessions.
+    // See doc/updates.md before re-enabling shared::update.
     // OLE STA lifetime outlives every ActiveX, WIC and Direct2D object.
     unsafe {
         if std::env::args().any(|arg| arg == "--set-credentials") {

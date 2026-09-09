@@ -45,10 +45,12 @@ flowchart LR
    changements d’URL, à la désactivation, aux redémarrages planifiés et à l’arrêt
    de Firefox. Display gère séparément les coupures et reconnexions RDP.
 
-Manager définit **ce qu’affiche le navigateur**. Display utilise sa propre
-configuration locale pour **la connexion RDP** ; il ne reçoit pas ses paramètres
-RDP de Manager. Plusieurs comptes kiosques peuvent partager les mêmes machines
-et les mêmes exécutables, avec une configuration d’affichage par utilisateur.
+Manager définit **ce qu’affiche le navigateur**. Par défaut, Display utilise
+sa propre configuration locale pour **la connexion RDP** — il peut aussi la
+recevoir de Manager (`manager.provides_rdp`), auquel cas le compte Windows du
+poste doit porter le même nom que le kiosque correspondant dans Manager.
+Plusieurs comptes kiosques peuvent partager les mêmes machines et les mêmes
+exécutables, avec une configuration d’affichage par utilisateur.
 
 ### Commandes distantes
 
@@ -61,6 +63,18 @@ La planification `restart_cron` redémarre uniquement Firefox. L’agent conserv
 l’identifiant de la dernière commande traitée pour éviter de la rejouer.
 Si Manager devient indisponible alors que Firefox fonctionne, l’agent conserve
 l’affichage en cours et réessaie de joindre le serveur.
+
+### Supervision
+
+Agent et Display affichent chacun leur version et leur date de build à l’écran,
+et envoient un heartbeat périodique à Manager (désactivé par défaut côté Display).
+Manager les expose en `/metrics` au format Prometheus, consommable depuis Grafana,
+et les résume dans son interface web. Voir le
+[README de NOC Manager](noc-manager/README.md#supervision-prometheus--grafana).
+
+Manager peut aussi centraliser la **connexion RDP** de Display (serveur, port,
+mot de passe, certificat), kiosque par kiosque — voir
+[RDP centralisée](noc-manager/README.md#rdp-centralisée-noc-display).
 
 ## Installer et configurer
 
@@ -83,10 +97,10 @@ préserver les configurations, les profils Firefox et les secrets déjà install
 
 ## Plateformes et builds
 
-Les nouvelles versions des trois applications incluent une
-[mise à jour automatique au démarrage](doc/updates.md) depuis les releases stables.
-La configuration reste conservée et un échec de vérification laisse démarrer la
-version actuelle. Les premiers binaires équipés doivent être installés manuellement.
+Un mécanisme de [mise à jour automatique au démarrage](doc/updates.md) existe
+dans le dépôt mais est **désactivé pour le moment** : conçu pour un binaire par
+instance, il ne convient pas tel quel à un binaire partagé par plusieurs
+sessions. Installer chaque version manuellement en attendant sa refonte.
 
 | Application | Exécutable | Cibles de la CI |
 | --- | --- | --- |

@@ -52,6 +52,13 @@ pub async fn run(cfg: Config, base: PathBuf, username: String, ui: UiHandle) {
         remote.clone(),
     ));
 
+    // Heartbeat leger vers NOC Manager (statut/version), pour /metrics.
+    tokio::spawn(crate::health::heartbeat_loop(
+        cfg.clone(),
+        username.clone(),
+        ui.clone(),
+    ));
+
     logging::log(
         "STARTING",
         &format!(

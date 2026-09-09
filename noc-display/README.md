@@ -132,6 +132,50 @@ nécessairement déchiffré en mémoire pour l'injection dans MsTscAx, qui poss�
 propres buffers. En mode DPAPI, il n'est pas persisté en clair ; en mode TOML,
 il reste en clair dans le fichier et dans la configuration en mémoire.
 
+Un mot de passe **centralisé dans NOC Manager** (voir la section suivante) est
+injecté exactement comme un mot de passe TOML : même priorité sur DPAPI, mêmes
+garanties d'absence dans les logs. DPAPI reste le filet de secours quand
+Manager ne fournit pas de mot de passe pour ce kiosque.
+
+## RDP centralisée (NOC Manager)
+
+Désactivé par défaut (`manager.provides_rdp = false`) : historiquement,
+Display n'a aucune dépendance à Manager. Une fois activé, `[rdp]
+server/port/password/ignore_certificate_errors` du `config.toml` local sont
+**ignorés** et récupérés depuis Manager (`GET /api/kiosk/{username}/rdp`) à
+chaque tentative de connexion — `[rdp] enabled` reste un interrupteur local :
+il faut les deux (local `enabled = true` **et** Manager `rdp.enabled = true`
+pour ce kiosque) pour qu'une connexion soit tentée.
+
+**`{username}` est le nom du compte Windows courant**
+(`identity::current_username()`, le même identifiant déjà utilisé pour le
+heartbeat), pas un champ de `config.toml`. Convention : nommer le compte
+Windows d'un poste Display exactement comme le `username` du kiosque
+correspondant dans Manager. Une fois cette convention respectée et
+`provides_rdp = true`, **aucun réglage RDP n'est nécessaire dans
+`config.toml`** au-delà de `[rdp] enabled = true` — créer le compte Windows
+avec le bon nom suffit.
+
+Comportement :
+
+* Manager injoignable, kiosque inconnu, ou réponse illisible → échec de la
+  tentative en cours, retraité par le compte à rebours habituel (aucun état
+  supplémentaire, comme toute autre erreur de préparation RDP).
+* Manager répond avec `enabled: false` pour ce kiosque → écran « Bienvenue,
+  votre poste est prêt » (le même que `[rdp] enabled = false` en local), pas
+  une erreur : désactiver le RDP d'un poste depuis Manager ne doit pas
+  déclencher de boucle de retry visible à l'écran.
+* Manager répond avec `enabled: true` → `server`/`port`/
+  `ignore_certificate_errors`/`password` remplacent les valeurs locales pour
+  cette tentative ; `username` effectif = le compte Windows courant (pas
+  `[rdp] username` du TOML, qui n'est utilisé que si `provides_rdp = false`).
+
+Implémenté en WinHTTP natif (`src/health.rs::fetch_rdp_config`), plafonné à
+16 Kio de réponse. Voir aussi le
+[README de NOC Manager](../noc-manager/README.md#rdp-centralisée-noc-display)
+pour l'UX du mot de passe côté administration et le compromis de sécurité
+qu'implique cette centralisation.
+
 ## États et reconnexion
 
 | État | Affichage |
@@ -160,6 +204,10 @@ La résolution est fixée avant Connect. Une modification de la zone client cach
 et déconnecte RDP puis déclenche une tentative à la nouvelle taille. Aucune API
 Dynamic Resolution Update récente. Fenêtre principale borderless/topmost sur le
 moniteur principal de la session ; pas de fullscreen natif ni Connection Bar.
+
+Dans tous les états, un bandeau discret en haut à droite affiche la version et
+la date de build (`NOC Display v0.1.0 — Build 09/09/26 12:00`), pour vérifier
+à l'œil quel binaire tourne sur un écran.
 
 ## Sécurité et dialogues
 
@@ -254,9 +302,25 @@ Rust 1.77.2 et les API/interfaces choisies visent NT 6.2 ou antérieur. Cela ne
 certifie pas encore l'exécution sur le vrai MultiPoint : recette cible nécessaire.
 
 DLL système : kernel32, user32, gdi32, ole32, oleaut32, advapi32, crypt32, d2d1,
-dwrite, ntdll, bcrypt. WIC charge windowscodecs via COM. MsTscAx charge mstscax.dll et les
+dwrite, ntdll, bcrypt, winhttp. WIC charge windowscodecs via COM. MsTscAx charge mstscax.dll et les
 composants RDP/sécurité fournis par le système cible. **Ne pas copier mstscax.dll
 de Windows 11 vers Server 2012.** Ni ATL redistribuable, CRT externe, .NET ou WinUI.
+
+## Heartbeat / supervision Prometheus
+
+Désactivé par défaut (voir `[manager]` dans `config.example.toml`) : Display n'a
+historiquement aucune dépendance à NOC Manager. Une fois activé, un thread dédié
+envoie périodiquement (`manager.heartbeat_seconds`, défaut **30 s**) un `POST`
+vers `http://{manager.host}:{manager.port}/api/heartbeat/display/{username}`
+(`username` = compte RDP configuré) avec la version, la date de build et l'état
+de connexion courant (`Connecting`, `Connected`, `Reconnecting`, `Error`…).
+
+Implémenté avec WinHTTP natif (aucune dépendance HTTP tierce, cohérent avec le
+reste du binaire) : voir `src/health.rs`. Toute erreur réseau est journalisée
+(`Heartbeat HRESULT=...`) puis ignorée jusqu'au prochain envoi — jamais bloquant
+pour l'affichage RDP. Côté NOC Manager, ce heartbeat alimente `/metrics` et
+l'interface web — voir le
+[README de NOC Manager](../noc-manager/README.md#supervision-prometheus--grafana).
 
 ## Validation
 

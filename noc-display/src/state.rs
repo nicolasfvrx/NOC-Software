@@ -7,6 +7,18 @@ pub enum AppState {
     Reconnecting,
     Error,
 }
+impl AppState {
+    /// Court libelle envoye dans le heartbeat vers NOC Manager.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Starting => "STARTING",
+            Self::Connecting => "CONNECTING",
+            Self::Connected => "CONNECTED",
+            Self::Reconnecting => "RECONNECTING",
+            Self::Error => "ERROR",
+        }
+    }
+}
 pub struct Machine {
     pub state: AppState,
     pub retry_at: Option<Instant>,

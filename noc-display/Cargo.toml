@@ -17,6 +17,11 @@ dev-escape = []
 [dependencies]
 serde = { version = "=1.0.197", features = ["derive"] }
 toml = "=0.5.11"
+# Only exception to this crate's zero-extra-dependency rule: a password
+# flows through this parser (health.rs, RDP config fetched from NOC
+# Manager) and a hand-rolled JSON unescaper is the wrong place to risk a
+# subtle correctness bug.
+serde_json = "=1.0.117"
 windows = { version = "=0.52.0", features = [
     "implement",
     "Foundation_Numerics",
@@ -37,6 +42,7 @@ windows = { version = "=0.52.0", features = [
     "Win32_Security_Cryptography",
     "Win32_System_LibraryLoader",
     "Win32_System_WindowsProgramming",
+    "Win32_Networking_WinHttp",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }

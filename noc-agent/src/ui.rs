@@ -360,6 +360,17 @@ impl eframe::App for KioskApp {
                 egui::FontId::monospace(info_size),
                 info_color,
             );
+            painter.text(
+                egui::pos2(rect.right() - 24.0, rect.top() + 24.0),
+                egui::Align2::RIGHT_TOP,
+                format!(
+                    "NOC Agent v{} — Build {}",
+                    env!("CARGO_PKG_VERSION"),
+                    env!("NOC_AGENT_BUILD_TIME")
+                ),
+                egui::FontId::monospace(info_size),
+                info_color,
+            );
             if !self.assets_note.is_empty() {
                 painter.text(
                     egui::pos2(rect.left() + 24.0, rect.top() + 24.0),

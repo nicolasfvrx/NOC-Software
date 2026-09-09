@@ -11,12 +11,35 @@ use crate::{
     status::Status,
     window::Window,
 };
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use windows::{core::*, Win32::UI::WindowsAndMessaging::*};
 
 /// Delay before the first RDP connection attempt, so the branded startup
 /// frame is visible for a moment instead of connecting instantly.
 const STARTUP_DELAY: Duration = Duration::from_secs(8);
+
+/// Current RDP connection state, published for the heartbeat thread
+/// (health.rs) to read. A plain global is simplest here: this process hosts
+/// exactly one App, and the heartbeat thread has no other way to reach it
+/// across the Win32 message loop.
+static CURRENT_STATE: OnceLock<Mutex<AppState>> = OnceLock::new();
+
+pub fn current_status() -> AppState {
+    *CURRENT_STATE
+        .get_or_init(|| Mutex::new(AppState::Starting))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
+fn publish_status(state: AppState) {
+    if let Ok(mut guard) = CURRENT_STATE
+        .get_or_init(|| Mutex::new(AppState::Starting))
+        .lock()
+    {
+        *guard = state;
+    }
+}
 
 pub struct App {
     window: Window,
@@ -87,6 +110,45 @@ impl App {
                 .update(Status::Ready, "Bienvenue. Votre poste est prêt.", false);
             self.last_message.clear();
             return;
+        }
+        if self.config.manager.provides_rdp {
+            match crate::health::fetch_rdp_config(
+                &self.config.manager.host,
+                self.config.manager.port,
+                &self.username,
+            ) {
+                // Manager turned this kiosk's RDP off: same idle screen as
+                // the local !rdp.enabled case above, not a connection error.
+                Ok(remote) if !remote.enabled => {
+                    self.machine = Machine::new();
+                    self.window
+                        .update(Status::Ready, "Bienvenue. Votre poste est prêt.", false);
+                    self.last_message.clear();
+                    return;
+                }
+                Ok(remote) if remote.server.trim().is_empty() => {
+                    self.failed("RDP config from Manager: enabled but no server configured");
+                    return;
+                }
+                Ok(remote) => {
+                    // Effective settings for this attempt only: Config::read()
+                    // overwrites self.config wholesale at the top of the next
+                    // attempt(), so nothing here leaks across reconnects.
+                    self.config.rdp.server = remote.server;
+                    self.config.rdp.port = remote.port;
+                    self.config.rdp.username = self.username.clone();
+                    self.config.rdp.ignore_certificate_errors = remote.ignore_certificate_errors;
+                    // None keeps ConfiguredProvider's existing DPAPI fallback.
+                    self.config.rdp.password = remote.password;
+                }
+                Err(e) => {
+                    self.failed(&format!(
+                        "RDP config fetch from Manager failed HRESULT={:08x}",
+                        e.code().0
+                    ));
+                    return;
+                }
+            }
         }
         self.machine.connecting(Instant::now());
         self.last_message.clear();
@@ -279,6 +341,7 @@ impl App {
         self.refresh();
     }
     fn refresh(&mut self) {
+        publish_status(self.machine.state);
         let (status, text, animate) = match self.machine.state {
             AppState::Starting | AppState::Connected => return,
             AppState::Connecting => (
@@ -322,6 +385,7 @@ pub fn run() -> Result<()> {
         env!("DISPLAYCLIENT_BUILD_TIME")
     ));
     let mut app = App::new()?;
+    crate::health::spawn(app.username.clone());
     app.schedule_first_attempt();
     unsafe {
         let mut message = MSG::default();

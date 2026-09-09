@@ -111,9 +111,14 @@ impl TextRenderer {
                 size *= 0.85;
             };
             let margin = (height * 0.018).clamp(8.0, 24.0).min(width * 0.05);
-            let build_text: Vec<u16> = concat!("Build ", env!("DISPLAYCLIENT_BUILD_TIME"))
-                .encode_utf16()
-                .collect();
+            let build_text: Vec<u16> = concat!(
+                "NOC Display v",
+                env!("CARGO_PKG_VERSION"),
+                " — Build ",
+                env!("DISPLAYCLIENT_BUILD_TIME")
+            )
+            .encode_utf16()
+            .collect();
             let (build, _) = self.layout(
                 &build_text,
                 (height * 0.015).clamp(10.0, 16.0),

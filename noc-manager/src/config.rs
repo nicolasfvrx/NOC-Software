@@ -8,6 +8,8 @@ pub struct Config {
     pub server: ServerConfig,
     #[serde(default)]
     pub data: DataConfig,
+    #[serde(default)]
+    pub health: HealthConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +31,14 @@ pub struct DataConfig {
     pub commands_file: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthConfig {
+    /// `noc_up` reports 0 in `/metrics` once a heartbeat is older than this.
+    /// Keep it a few times the agents'/displays' own heartbeat interval.
+    #[serde(default = "default_stale_after_seconds")]
+    pub stale_after_seconds: u64,
+}
+
 fn default_listen() -> String {
     "0.0.0.0".to_string()
 }
@@ -43,6 +53,10 @@ fn default_data_file() -> String {
 
 fn default_commands_file() -> String {
     "commands.json".to_string()
+}
+
+fn default_stale_after_seconds() -> u64 {
+    90
 }
 
 impl Default for ServerConfig {
@@ -64,6 +78,14 @@ impl Default for DataConfig {
     }
 }
 
+impl Default for HealthConfig {
+    fn default() -> Self {
+        Self {
+            stale_after_seconds: default_stale_after_seconds(),
+        }
+    }
+}
+
 const DEFAULT_CONFIG_TOML: &str = r#"[server]
 listen = "0.0.0.0"
 port = 8080
@@ -72,6 +94,9 @@ api_token = ""
 [data]
 file = "kiosks.json"
 commands_file = "commands.json"
+
+[health]
+stale_after_seconds = 90
 "#;
 
 /// Loads config.toml, creating it with default values if it does not exist.

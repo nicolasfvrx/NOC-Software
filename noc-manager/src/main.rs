@@ -4,11 +4,10 @@
 mod api;
 mod commands;
 mod config;
+mod health;
 mod models;
 mod storage;
 mod web;
-#[path = "../../shared/update.rs"]
-mod startup_update;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -16,19 +15,22 @@ use std::sync::Arc;
 use axum::Router;
 
 use commands::CommandStore;
+use health::HealthStore;
 use storage::Storage;
 
 pub struct AppState {
     pub storage: Storage,
     pub commands: CommandStore,
+    pub health: HealthStore,
     pub api_token: String,
+    pub health_stale_after_seconds: u64,
 }
 
 #[tokio::main]
 async fn main() {
-    if startup_update::run("noc-manager", "noc-manager.exe") {
-        return;
-    }
+    // Startup auto-update is disabled: it assumed one binary per running
+    // instance, but this binary is shared by several concurrent sessions.
+    // See doc/updates.md before re-enabling shared::update.
     if std::env::args().any(|arg| arg == "--version" || arg == "-V") {
         println!("NOC Manager {} — Norfair Operation Center", env!("CARGO_PKG_VERSION"));
         return;
@@ -62,7 +64,9 @@ async fn run() -> Result<(), String> {
     let state = Arc::new(AppState {
         storage,
         commands,
+        health: HealthStore::new(),
         api_token: config.server.api_token.trim().to_string(),
+        health_stale_after_seconds: config.health.stale_after_seconds,
     });
 
     let app = Router::new()
