@@ -4,3 +4,5 @@
 /commands.json.invalid
 /config.toml
 *.tmp
+/health.sqlite3*
+/rdp_servers.json

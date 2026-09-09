@@ -23,8 +23,7 @@ impl Storage {
         let kiosks: Vec<Kiosk> = if raw.trim().is_empty() {
             Vec::new()
         } else {
-            serde_json::from_str(&raw)
-                .map_err(|e| format!("invalid {}: {e}", path.display()))?
+            serde_json::from_str(&raw).map_err(|e| format!("invalid {}: {e}", path.display()))?
         };
 
         Ok(Self {
@@ -49,8 +48,11 @@ impl Storage {
     pub fn add(&self, kiosk: Kiosk) -> Result<(), String> {
         let mut kiosks = self.kiosks.lock().unwrap();
         crate::models::validate(&kiosk, &kiosks, None)?;
-        kiosks.push(kiosk);
-        Self::write(&self.path, &kiosks)
+        let mut next = kiosks.clone();
+        next.push(kiosk);
+        Self::write(&self.path, &next)?;
+        *kiosks = next;
+        Ok(())
     }
 
     /// `password` resolves under the same lock as the lookup/write, so a
@@ -72,18 +74,27 @@ impl Storage {
             PasswordAction::Clear => None,
         };
         crate::models::validate(&kiosk, &kiosks, Some(previous_username))?;
-        kiosks[index] = kiosk;
-        Self::write(&self.path, &kiosks)
+        let mut next = kiosks.clone();
+        next[index] = kiosk;
+        Self::write(&self.path, &next)?;
+        *kiosks = next;
+        Ok(())
     }
 
     pub fn delete(&self, username: &str) -> Result<(), String> {
         let mut kiosks = self.kiosks.lock().unwrap();
         let before = kiosks.len();
-        kiosks.retain(|k| k.username != username);
-        if kiosks.len() == before {
+        let next: Vec<_> = kiosks
+            .iter()
+            .filter(|k| k.username != username)
+            .cloned()
+            .collect();
+        if next.len() == before {
             return Err(format!("kiosk '{username}' not found"));
         }
-        Self::write(&self.path, &kiosks)
+        Self::write(&self.path, &next)?;
+        *kiosks = next;
+        Ok(())
     }
 
     /// Atomic-ish write: serialize to `<file>.tmp`, then rename over the target.

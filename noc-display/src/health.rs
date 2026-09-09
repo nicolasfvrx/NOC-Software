@@ -53,6 +53,8 @@ fn run(username: String) {
 pub struct RdpConfigResponse {
     pub enabled: bool,
     #[serde(default)]
+    pub username: String,
+    #[serde(default)]
     pub server: String,
     #[serde(default = "default_rdp_port")]
     pub port: u16,
@@ -213,14 +215,7 @@ enum HttpGet {
 fn get(host: &str, port: u16, path: &str) -> Result<HttpGet> {
     unsafe {
         let connection = open(host, port, "GET", path)?;
-        WinHttpSendRequest(
-            connection.request.0,
-            None,
-            None,
-            0,
-            0,
-            0,
-        )?;
+        WinHttpSendRequest(connection.request.0, None, None, 0, 0, 0)?;
         WinHttpReceiveResponse(connection.request.0, std::ptr::null_mut())?;
         let status = status_code(connection.request.0)?;
         if status == 404 {
@@ -238,7 +233,10 @@ fn get(host: &str, port: u16, path: &str) -> Result<HttpGet> {
                 break;
             }
             if body.len() + available as usize > MAX_BODY_BYTES {
-                return Err(Error::new(E_FAIL, "réponse trop volumineuse".to_string().into()));
+                return Err(Error::new(
+                    E_FAIL,
+                    "réponse trop volumineuse".to_string().into(),
+                ));
             }
             let mut chunk = vec![0u8; available as usize];
             let mut read: u32 = 0;
@@ -264,13 +262,12 @@ mod tests {
 
     #[test]
     fn rdp_config_response_parses_manager_json_and_ignores_extra_fields() {
-        // `username` is served for symmetry but unused here: the Windows
-        // account name is already the lookup key, not something to parse
-        // back out of the response.
+        // The Linux login may differ from the Windows lookup identity.
         let json = br#"{"enabled":true,"server":"192.168.10.50","port":3389,
             "username":"kiosk-noc-1","password":"s3cret","ignore_certificate_errors":true}"#;
         let parsed: RdpConfigResponse = serde_json::from_slice(json).unwrap();
         assert!(parsed.enabled);
+        assert_eq!(parsed.username, "kiosk-noc-1");
         assert_eq!(parsed.server, "192.168.10.50");
         assert_eq!(parsed.port, 3389);
         assert_eq!(parsed.password.as_deref(), Some("s3cret"));
@@ -283,6 +280,7 @@ mod tests {
         assert!(!parsed.enabled);
         assert_eq!(parsed.port, 3389);
         assert!(parsed.password.is_none());
+        assert!(parsed.username.is_empty());
         assert!(!parsed.ignore_certificate_errors);
     }
 }

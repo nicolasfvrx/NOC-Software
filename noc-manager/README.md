@@ -28,14 +28,15 @@ Usage prévu : réseau local uniquement.
 | `src/storage.rs` | chargement / écriture atomique de `kiosks.json` |
 | `src/api.rs` | API HTTP + token bearer optionnel |
 | `src/commands.rs` | commandes distantes (`commands.json`, queue / get / ack) |
-| `src/health.rs` | heartbeats agent/display en mémoire + rendu Prometheus (`/metrics`) |
-| `src/web.rs` | interface web (HTML/CSS générés en Rust) |
+| `src/health.rs` | inventaire en mémoire, historique SQLite et rendu Prometheus (`/metrics`) |
+| `src/web.rs`, `src/dashboard.rs`, `src/assets/` | formulaires, supervision et ressources web embarquées |
 | `rust-toolchain.toml` | pin Rust 1.77.2 (compatibilité Server 2012) |
 | `.cargo/config.toml` | CRT MSVC statique |
 | `kiosk.sh` | client Linux |
 | `config.example.toml`, `kiosks.example.json`, `commands.example.json` | exemples |
 
-Aucun JavaScript de framework, aucune base de données.
+Aucun framework JavaScript ni service de base de données à installer. SQLite est
+embarqué dans l’exécutable pour l’historique ; les configurations restent en JSON.
 
 ## Build Windows (cible Windows Server 2012)
 
@@ -176,23 +177,65 @@ agents/displays eux-mêmes (par défaut 30 s côté client).
 
 `http://<serveur>:8080/`
 
-Liste des kiosques, organisée en deux groupes de colonnes :
+Interface sombre en français, consultable depuis un navigateur moderne avec
+JavaScript activé. CSS et JavaScript sont embarqués, sans CDN.
 
-* **Kiosque** : Name, Username, URL, Enabled, Restart schedule
-* **Supervision** : Commande en attente, **Agent**, **Display** — dernier
-  heartbeat reçu (badge vert = récent, rouge/gris = absent ou périmé),
-  info-bulle avec version + build + état rapporté
-* en-tête de page : version et date de build de NOC Manager lui-même
-* la ligne d'actions (Edit / Redémarrer Firefox / Redémarrer l'agent /
-  Delete) défile horizontalement dans son propre cadre si l'écran est
-  étroit ; le reste de la page ne bouge pas
+* **Accueil** (`/`) : cartes des kiosques avec états Agent et Display séparés,
+  commandes en attente et nouveaux écrans Display à configurer.
+* **Kiosques** (`/kiosks`) : recherche, filtres, ajout manuel avant toute connexion,
+  modification, suppression et commandes de redémarrage.
+* **Serveurs RDP** (`/rdp-servers`) : catalogue des destinations Linux réutilisables,
+  avec nom, IP/DNS, port et réglage de certificat ; création et modification.
+* **Supervision** (`/supervision`) : tous les clients détectés, y compris sans
+  configuration, fiches par application/session, versions, builds et historique
+  filtrable par application, session exacte, état et dates. Les dates utilisent
+  le fuseau du navigateur. Pagination par groupes de 100 événements.
 
-Formulaire Add/Edit, en sections :
+La barre commune compte les kiosques configurés, opérationnels, à vérifier et
+désactivés, puis les **nouveaux écrans** : uniquement les Displays non associés.
+Les Agents non associés restent consultables dans la supervision et l’historique,
+mais ne sont jamais proposés comme nouveaux écrans. L’Agent démarre dans la session
+Linux après connexion RDP ; son absence initiale est présentée comme une attente de démarrage.
+Un kiosque opérationnel est activé et possède deux heartbeats récents : Agent
+`RUNNING`, Display `CONNECTED`. « Jamais vu » ne permet pas de conclure que le
+client est hors ligne : les heartbeats Display sont désactivés par défaut.
 
-* **Général** : name, username, url, enabled
-* **Planification du redémarrage** : restart_cron, avec aide cron intégrée
-* **RDP (NOC Display)** : voir [RDP centralisée (NOC Display)](#rdp-centralisée-noc-display)
-  ci-dessous pour le détail des champs et de l'UX du mot de passe
+Les statuts s’actualisent toutes les 10 secondes sans remplacer les champs de
+formulaire. Un échec d’actualisation est signalé. La première page de l’historique
+s’actualise aussi ; les pages anciennes restent stables pendant la consultation.
+
+Un Display non associé porte son nom de session Windows et un badge « Nouveau ».
+Cliquer sur son nom ou « Configurer » ouvre directement `/kiosk/new?display=...`.
+Le formulaire préremplit le nom du kiosque et la session Display. Le compte Linux
+est saisi manuellement. Il active le kiosque et le RDP centralisé, propose
+le port 3389 et laisse la planification vide. Le serveur Linux et l’URL sont
+signalés « À compléter ». Saisir le mot de passe RDP ou choisir explicitement les
+identifiants déjà enregistrés sur le Display. Aucune information inconnue n’est inventée.
+Un Display déjà associé ouvre l’édition de son kiosque, pour éviter les doublons.
+La création manuelle reste disponible. Supprimer une configuration conserve les
+heartbeats et fait réapparaître son Display comme nouvel écran.
+
+### Catalogue de serveurs RDP
+
+Dans un kiosque, sélectionner un serveur existant ou utiliser « Créer un serveur
+ici ». La création enregistre et sélectionne la destination sans perdre les autres
+champs du formulaire. Le compte Linux et le mot de passe restent propres au kiosque.
+Le catalogue ne contient aucun compte ni mot de passe.
+
+Le fichier `rdp_servers.json` est indépendant des kiosques ; son chemin se règle
+avec `[data] rdp_servers_file`. Il est créé au premier enregistrement. Une référence
+facultative `rdp.server_id` lie un kiosque au catalogue. Modifier une adresse, un port
+ou le réglage de certificat est pris en compte à la prochaine connexion RDP des
+Displays associés, sans interrompre les sessions en cours.
+
+Les anciennes configurations gardent leur adresse via « Adresse spécifique à ce
+kiosque ». Elles peuvent être rattachées au catalogue en édition. Une référence
+inconnue est signalée : Manager ne renvoie pas une ancienne destination par défaut.
+Inclure `rdp_servers.json` dans les sauvegardes du Manager.
+
+Les formulaires regroupent le nom, les sessions Agent/Display, l’URL, l’activation,
+la planification et le RDP. `display_username` est facultatif : vide ou absent,
+il reprend `username`. Chaque session Display ne peut appartenir qu’à un kiosque.
 
 Règles de validation :
 
@@ -244,8 +287,8 @@ Kiosque inconnu — HTTP 404 :
 Endpoint **séparé** de `GET /api/kiosk/{username}` ci-dessus : celui-là est
 récupéré (et potentiellement loggé) par NOC Agent sur les postes Linux, il
 ne doit jamais transporter de mot de passe. `{username}` = le nom du compte
-Windows du poste NOC Display qui interroge (même valeur que `Kiosk.username`
-puisque l'utilisateur RDP est le même compte que le kiosque).
+Windows du poste NOC Display qui interroge. La recherche utilise
+`Kiosk.display_username`, ou `Kiosk.username` si ce champ est absent.
 
 ```
 curl http://192.168.10.64:8080/api/kiosk/kiosk-noc-1/rdp
@@ -268,13 +311,13 @@ kiosque — Display retombe alors sur son DPAPI local. Kiosque inconnu — même
 
 ## RDP centralisée (NOC Display)
 
-Un kiosque Agent (compte Linux, URL Firefox) et sa connexion RDP Display
-visent la même chose : le compte Linux affiché. Pas d'identifiant séparé —
-`Kiosk.username` sert à la fois de compte Linux pour Agent et d'utilisateur
-de connexion RDP pour Display. Chaque poste NOC Display retrouve sa
-configuration en interrogeant `/api/kiosk/{username}/rdp` avec **le nom de
-son propre compte Windows** : le compte Windows d'un poste Display doit donc
-porter exactement le même nom que le `username` du kiosque dans Manager.
+Chaque Display interroge `/api/kiosk/{username}/rdp` avec **le nom de son propre
+compte Windows**. Manager résout l’association `display_username` et retourne
+`Kiosk.username` comme utilisateur de connexion Linux. Exemple : Display
+`ecran-accueil`, Agent `linux-accueil`. Les heartbeats et la récupération de
+configuration conservent leurs identités respectives. Mettre à jour Display
+pour utiliser des noms différents en RDP centralisé : les anciennes versions
+ignorent le nom Linux de la réponse. Les installations de même nom restent compatibles.
 
 Champs du formulaire d'édition (section « RDP (NOC Display) ») :
 
@@ -424,9 +467,44 @@ COMMAND ack mismatch username=kiosk-noc-1 requested=41 pending=42
 ## Supervision Prometheus / Grafana
 
 NOC Agent et NOC Display envoient chacun un heartbeat périodique (statut, version,
-build) ; NOC Manager le conserve en mémoire (pas de persistance : un redémarrage du
-Manager perd l'historique, sans impact puisque chaque instance se réannonce dans son
-propre intervalle) et l'expose en `/metrics` au format Prometheus.
+build). Manager conserve le dernier état en mémoire et sur disque, et chaque
+événement dans SQLite. Les métriques `/metrics` gardent leurs noms et étiquettes.
+
+Configuration facultative (les anciennes configurations restent valides) :
+
+```toml
+[health]
+stale_after_seconds = 90
+history_file = "health.sqlite3"
+retention_days = 30
+```
+
+La rétention est limitée à 1–365 jours. Purge au démarrage puis toutes les heures ;
+les recherches excluent immédiatement les événements au-delà de la rétention.
+Le dernier état connu de chaque client reste conservé, même après purge, afin de
+retrouver les clients non configurés. Les timestamps anciens ne sont pas rafraîchis
+au redémarrage. Une association ne réécrit pas l’identité historique des événements.
+
+Prévoir l’espace disque pour chaque heartbeat : 200 kiosques avec Agent et Display
+à 30 secondes représentent environ 34,6 millions d’événements sur 30 jours.
+Les index et SQLite ajoutent un coût de stockage ; mesurer le volume réel du parc.
+Les pages libérées sont réutilisées, le fichier ne rétrécit pas automatiquement.
+Pour une sauvegarde simple, arrêter Manager puis copier `health.sqlite3` avec les
+fichiers JSON ; ne pas copier uniquement le fichier SQLite pendant une écriture WAL.
+
+En cas d’échec de stockage, les statuts continuent en mémoire et un avertissement
+indique que l’historique est incomplet. Les événements perdus ne sont pas rejoués.
+Si la base ne peut pas être ouverte au démarrage, corriger l’accès puis redémarrer.
+
+Les routes web `GET /ui/status` et `GET /ui/history` alimentent l’interface selon
+son accès existant (interface web ouverte, token réservé à `/api/*` et `/metrics`).
+Elles n’exposent aucun mot de passe RDP. L’historique accepte `app`, `username`,
+`state`, `from`/`to` (secondes Unix) et `before` (curseur retourné dans `next`).
+
+Validation : `cargo +1.77.2 test --locked`, puis, depuis la racine,
+`python scripts/test-manager.py noc-manager/target/x86_64-pc-windows-msvc/debug/noc-manager.exe`
+après compilation avec cette cible. Le test HTTP utilise un dossier temporaire
+et 200 kiosques fictifs ; il ne contacte aucune installation existante.
 
 ### `POST /api/heartbeat/{app}/{username}`
 

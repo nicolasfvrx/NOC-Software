@@ -53,6 +53,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Verify suite and Cargo versions
+        run: python scripts/check-versions.py
       - name: Install Rust compatible with Server 2012 and 2016
         shell: pwsh
         run: |
@@ -112,6 +114,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Verify suite and Cargo versions
+        run: python3 scripts/check-versions.py
       - name: Install build dependencies
         run: |
           # Pre-installed on the runner image, unused by this project (Firefox

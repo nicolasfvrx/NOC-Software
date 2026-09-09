@@ -47,8 +47,8 @@ flowchart LR
 
 Manager définit **ce qu’affiche le navigateur**. Par défaut, Display utilise
 sa propre configuration locale pour **la connexion RDP** — il peut aussi la
-recevoir de Manager (`manager.provides_rdp`), auquel cas le compte Windows du
-poste doit porter le même nom que le kiosque correspondant dans Manager.
+recevoir de Manager (`manager.provides_rdp`). Le compte Windows du Display est
+associé à la session Linux de l’Agent dans Manager ; leurs noms peuvent différer.
 Plusieurs comptes kiosques peuvent partager les mêmes machines et les mêmes
 exécutables, avec une configuration d’affichage par utilisateur.
 
@@ -127,10 +127,9 @@ de la release après réussite des six builds, avec quatre archives d'installati
 Windows, deux archives Linux et quatre exécutables bruts pour la mise à jour
 automatique. Un suffixe comme `v0.2.0-rc.1` crée une préversion.
 
-Le tag représente la version de la **suite NOC**. Les versions internes restent
-indépendantes : Manager **0.1.0**, Display **0.1.0**, Agent **1.0.0** pour cette
-première livraison de la suite. Elles figurent dans les `Cargo.toml` et dans les
-métadonnées ou la commande `--version` des applications concernées.
+Le tag représente la version de la **suite NOC**. `VERSION`, les trois
+`Cargo.toml` et les entrées des applications dans leurs `Cargo.lock` portent
+la même version. Les builds vérifient cet alignement avec le tag avant de compiler.
 
 ## Périmètre actuel
 

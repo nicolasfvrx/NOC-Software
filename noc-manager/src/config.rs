@@ -25,6 +25,8 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataConfig {
+    #[serde(default = "default_rdp_servers_file")]
+    pub rdp_servers_file: String,
     #[serde(default = "default_data_file")]
     pub file: String,
     #[serde(default = "default_commands_file")]
@@ -33,6 +35,10 @@ pub struct DataConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthConfig {
+    #[serde(default = "default_history_file")]
+    pub history_file: String,
+    #[serde(default = "default_retention_days")]
+    pub retention_days: u64,
     /// `noc_up` reports 0 in `/metrics` once a heartbeat is older than this.
     /// Keep it a few times the agents'/displays' own heartbeat interval.
     #[serde(default = "default_stale_after_seconds")]
@@ -54,9 +60,18 @@ fn default_data_file() -> String {
 fn default_commands_file() -> String {
     "commands.json".to_string()
 }
+fn default_rdp_servers_file() -> String {
+    "rdp_servers.json".into()
+}
 
 fn default_stale_after_seconds() -> u64 {
     90
+}
+fn default_history_file() -> String {
+    "health.sqlite3".into()
+}
+fn default_retention_days() -> u64 {
+    30
 }
 
 impl Default for ServerConfig {
@@ -72,6 +87,7 @@ impl Default for ServerConfig {
 impl Default for DataConfig {
     fn default() -> Self {
         Self {
+            rdp_servers_file: default_rdp_servers_file(),
             file: default_data_file(),
             commands_file: default_commands_file(),
         }
@@ -81,6 +97,8 @@ impl Default for DataConfig {
 impl Default for HealthConfig {
     fn default() -> Self {
         Self {
+            history_file: default_history_file(),
+            retention_days: default_retention_days(),
             stale_after_seconds: default_stale_after_seconds(),
         }
     }
@@ -94,9 +112,12 @@ api_token = ""
 [data]
 file = "kiosks.json"
 commands_file = "commands.json"
+rdp_servers_file = "rdp_servers.json"
 
 [health]
 stale_after_seconds = 90
+history_file = "health.sqlite3"
+retention_days = 30
 "#;
 
 /// Loads config.toml, creating it with default values if it does not exist.

@@ -1,5 +1,4 @@
-//! Suite version, independent of each app's own `Cargo.toml` `version`
-//! (those stay independent on purpose — see the root README). This is
+//! Suite version, kept aligned with each app's `Cargo.toml` version. This is
 //! what's shown on screen and in `--version`: the exact tag when built via
 //! the release packaging scripts (`NOC_SUITE_VERSION`, set by
 //! scripts/build-windows.ps1 / scripts/build-linux.sh), or the repo-root

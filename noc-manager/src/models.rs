@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Kiosk {
     pub username: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_username: Option<String>,
     pub name: String,
     pub url: String,
     #[serde(default)]
@@ -16,12 +18,22 @@ pub struct Kiosk {
     pub rdp: RdpConfig,
 }
 
+impl Kiosk {
+    pub fn display_username(&self) -> &str {
+        self.display_username
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or(&self.username)
+    }
+}
+
 /// Centralized RDP connection settings, served to NOC Display via
-/// `GET /api/kiosk/{username}/rdp`. `username` is not duplicated here:
-/// the same `Kiosk.username` is both the Linux/browser-kiosk account and
-/// the RDP login username, since they're the same account.
+/// `GET /api/kiosk/{display_username}/rdp`. The returned login username is
+/// `Kiosk.username` (Linux), which can differ from the Display lookup identity.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RdpConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_id: Option<String>,
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
@@ -54,6 +66,7 @@ pub enum PasswordAction {
 impl Default for RdpConfig {
     fn default() -> Self {
         Self {
+            server_id: None,
             enabled: false,
             server: String::new(),
             port: default_rdp_port(),
@@ -84,30 +97,52 @@ pub fn validate(
 ) -> Result<(), String> {
     let username = kiosk.username.trim();
     if username.is_empty() {
-        return Err("username is required".to_string());
+        return Err("La session Agent est obligatoire".to_string());
     }
     if !username
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
     {
-        return Err("username may only contain letters, digits, '-', '_' and '.'".to_string());
+        return Err(
+            "Session Agent : seuls lettres, chiffres, tirets, points et underscores sont acceptés"
+                .to_string(),
+        );
     }
 
     let is_rename = previous_username.map(|p| p != username).unwrap_or(true);
     if is_rename && existing.iter().any(|k| k.username == username) {
-        return Err(format!("username '{username}' already exists"));
+        return Err(format!("La session Agent '{username}' est déjà configurée"));
     }
 
     if kiosk.name.trim().is_empty() {
-        return Err("name is required".to_string());
+        return Err("Le nom du kiosque est obligatoire".to_string());
+    }
+
+    let display = kiosk.display_username();
+    if !display
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return Err(
+            "Nom Display : seuls lettres, chiffres, tirets, points et underscores sont acceptés"
+                .into(),
+        );
+    }
+    if existing
+        .iter()
+        .any(|k| Some(k.username.as_str()) != previous_username && k.display_username() == display)
+    {
+        return Err(format!(
+            "Le Display '{display}' est déjà associé à un kiosque"
+        ));
     }
 
     let url = kiosk.url.trim();
     if url.is_empty() {
-        return Err("url is required".to_string());
+        return Err("L’URL est obligatoire".to_string());
     }
     if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err("url must start with http:// or https://".to_string());
+        return Err("L’URL doit commencer par http:// ou https://".to_string());
     }
 
     if let Some(cron) = kiosk.restart_cron.as_deref() {
@@ -119,11 +154,11 @@ pub fn validate(
     if kiosk.rdp.enabled {
         let server = kiosk.rdp.server.trim();
         if server.is_empty() || kiosk.rdp.port == 0 {
-            return Err("rdp.server and rdp.port are required when RDP is enabled".to_string());
+            return Err("RDP activé : indiquez un serveur et un port entre 1 et 65535".to_string());
         }
         if server.contains("://") || server.contains('@') || server.contains('/') {
             return Err(
-                "rdp.server must be a DNS name or IP address, without a URL scheme or credentials"
+                "Le serveur RDP doit être un nom DNS ou une adresse IP, sans schéma URL ni identifiants"
                     .to_string(),
             );
         }
@@ -137,7 +172,7 @@ pub fn validate_cron(expr: &str) -> Result<(), String> {
     let fields: Vec<&str> = expr.split_whitespace().collect();
     if fields.len() != 5 {
         return Err(format!(
-            "restart_cron must have 5 fields (minute hour day-of-month month day-of-week), got {}",
+            "La planification exige 5 champs (minute heure jour mois jour-de-semaine), {} reçu(s)",
             fields.len()
         ));
     }
@@ -146,7 +181,7 @@ pub fn validate_cron(expr: &str) -> Result<(), String> {
             .chars()
             .all(|c| c.is_ascii_digit() || matches!(c, '*' | '/' | ',' | '-'))
         {
-            return Err(format!("invalid character in cron field '{field}'"));
+            return Err(format!("Caractère invalide dans le champ cron '{field}'"));
         }
     }
     Ok(())
@@ -155,6 +190,12 @@ pub fn validate_cron(expr: &str) -> Result<(), String> {
 /// Normalizes user input coming from the web form.
 pub fn normalize(kiosk: &mut Kiosk) {
     kiosk.username = kiosk.username.trim().to_string();
+    kiosk.display_username = kiosk
+        .display_username
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     kiosk.name = kiosk.name.trim().to_string();
     kiosk.url = kiosk.url.trim().to_string();
     kiosk.restart_cron = match kiosk.restart_cron.as_deref() {

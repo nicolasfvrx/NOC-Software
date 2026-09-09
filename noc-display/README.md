@@ -58,7 +58,7 @@ Deux emplacements possibles pour `config.toml`, cherchés dans cet ordre :
 
 Avec la configuration RDP centralisée (`manager.provides_rdp`, voir plus bas),
 le fichier global suffit pour toute une machine : il ne reste plus qu'à créer
-chaque compte Windows avec le nom du kiosque correspondant dans Manager,
+chaque compte Windows et de l’associer au kiosque correspondant dans Manager,
 sans aucun fichier à écrire par compte. Sans centralisation, chaque écran a
 besoin de son propre fichier (serveur/utilisateur RDP différents).
 
@@ -158,9 +158,9 @@ pour ce kiosque) pour qu'une connexion soit tentée.
 
 **`{username}` est le nom du compte Windows courant**
 (`identity::current_username()`, le même identifiant déjà utilisé pour le
-heartbeat), pas un champ de `config.toml`. Convention : nommer le compte
-Windows d'un poste Display exactement comme le `username` du kiosque
-correspondant dans Manager. Une fois cette convention respectée et
+heartbeat), pas un champ de `config.toml`. Dans Manager, associer ce compte
+Windows au kiosque via `display_username` ; s’il est vide, le nom de la session
+Agent est utilisé. Une fois cette association renseignée et
 `provides_rdp = true`, **aucun réglage RDP n'est nécessaire dans
 `config.toml`** au-delà de `[rdp] enabled = true` — créer le compte Windows
 avec le bon nom suffit. Combiné au `config.toml` **global** (voir "Livraison
@@ -179,8 +179,9 @@ Comportement :
   déclencher de boucle de retry visible à l'écran.
 * Manager répond avec `enabled: true` → `server`/`port`/
   `ignore_certificate_errors`/`password` remplacent les valeurs locales pour
-  cette tentative ; `username` effectif = le compte Windows courant (pas
-  `[rdp] username` du TOML, qui n'est utilisé que si `provides_rdp = false`).
+  cette tentative ; `username` effectif = le compte Linux retourné par Manager,
+  avec repli sur le compte Windows si la réponse ne contient pas de nom.
+  `[rdp] username` du TOML reste utilisé si `provides_rdp = false`.
 
 Implémenté en WinHTTP natif (`src/health.rs::fetch_rdp_config`), plafonné à
 16 Kio de réponse. Voir aussi le
@@ -324,7 +325,7 @@ Désactivé par défaut (voir `[manager]` dans `config.example.toml`) : Display 
 historiquement aucune dépendance à NOC Manager. Une fois activé, un thread dédié
 envoie périodiquement (`manager.heartbeat_seconds`, défaut **30 s**) un `POST`
 vers `http://{manager.host}:{manager.port}/api/heartbeat/display/{username}`
-(`username` = compte RDP configuré) avec la version, la date de build et l'état
+(`username` = nom de la session Windows courante) avec la version, la date de build et l'état
 de connexion courant (`Connecting`, `Connected`, `Reconnecting`, `Error`…).
 
 Implémenté avec WinHTTP natif (aucune dépendance HTTP tierce, cohérent avec le

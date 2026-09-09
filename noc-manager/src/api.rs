@@ -22,10 +22,7 @@ pub fn router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/kiosk/:username/command",
             get(get_command).post(post_command),
         )
-        .route(
-            "/api/kiosk/:username/command/:id/ack",
-            post(ack_command),
-        )
+        .route("/api/kiosk/:username/command/:id/ack", post(ack_command))
         .route("/api/heartbeat/:app/:username", post(heartbeat))
         .route("/metrics", get(metrics))
         .layer(axum::middleware::from_fn_with_state(state, auth))
@@ -38,7 +35,11 @@ async fn health() -> Json<serde_json::Value> {
 async fn kiosk(State(state): State<Arc<AppState>>, Path(username): Path<String>) -> Response {
     match state.storage.get(&username) {
         // enabled=false is returned as-is: the kiosk script decides what to do.
-        Some(kiosk) => Json(kiosk).into_response(),
+        Some(mut kiosk) => {
+            // Only the dedicated Display route returns the RDP secret.
+            kiosk.rdp.password = None;
+            Json(kiosk).into_response()
+        }
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "kiosk_not_found" })),
@@ -48,21 +49,40 @@ async fn kiosk(State(state): State<Arc<AppState>>, Path(username): Path<String>)
 }
 
 /// `GET /api/kiosk/{username}/rdp` - polled by NOC Display, keyed by the
-/// Windows account's own username (must match `Kiosk.username`). A
+/// Windows account's own username (resolved through `display_username`). A
 /// deliberately separate endpoint from `GET /api/kiosk/{username}`: that
 /// one is fetched and potentially logged by NOC Agent, and should never
 /// carry an RDP password.
 async fn kiosk_rdp(State(state): State<Arc<AppState>>, Path(username): Path<String>) -> Response {
-    match state.storage.get(&username) {
-        Some(kiosk) => Json(json!({
-            "enabled": kiosk.rdp.enabled,
-            "server": kiosk.rdp.server,
-            "port": kiosk.rdp.port,
-            "username": kiosk.username,
-            "password": kiosk.rdp.password,
-            "ignore_certificate_errors": kiosk.rdp.ignore_certificate_errors,
-        }))
-        .into_response(),
+    match state
+        .storage
+        .all()
+        .into_iter()
+        .find(|k| k.display_username() == username)
+    {
+        Some(mut kiosk) => {
+            if let Some(id) = &kiosk.rdp.server_id {
+                let Some(server) = state.rdp_servers.get(id) else {
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(json!({"error":"rdp_server_not_found"})),
+                    )
+                        .into_response();
+                };
+                kiosk.rdp.server = server.address;
+                kiosk.rdp.port = server.port;
+                kiosk.rdp.ignore_certificate_errors = server.ignore_certificate_errors;
+            }
+            Json(json!({
+                "enabled": kiosk.rdp.enabled,
+                "server": kiosk.rdp.server,
+                "port": kiosk.rdp.port,
+                "username": kiosk.username,
+                "password": kiosk.rdp.password,
+                "ignore_certificate_errors": kiosk.rdp.ignore_certificate_errors,
+            }))
+            .into_response()
+        }
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "kiosk_not_found" })),
@@ -122,7 +142,10 @@ async fn post_command(
     };
 
     match commands::queue_command(&state.storage, &state.commands, &username, &action) {
-        Ok(command) => (StatusCode::CREATED, Json(json!({ "command": command_view(&command) })))
+        Ok(command) => (
+            StatusCode::CREATED,
+            Json(json!({ "command": command_view(&command) })),
+        )
             .into_response(),
         Err(error) => command_error(error),
     }
@@ -165,7 +188,19 @@ async fn heartbeat(
         Ok(Json(body)) => body,
         Err(_) => HeartbeatBody::default(),
     };
-    state.health.record(&app, &username, body);
+    if username.is_empty() || username.len() > 256 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"invalid_username"})),
+        )
+            .into_response();
+    }
+    if tokio::task::spawn_blocking(move || state.health.record(&app, &username, body))
+        .await
+        .is_err()
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
     Json(json!({ "status": "ok" })).into_response()
 }
 
@@ -173,7 +208,10 @@ async fn heartbeat(
 /// scrape job (from there, graph in Grafana).
 async fn metrics(State(state): State<Arc<AppState>>) -> Response {
     (
-        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/plain; version=0.0.4",
+        )],
         health::render_prometheus(&state.health, state.health_stale_after_seconds),
     )
         .into_response()

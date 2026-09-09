@@ -1,7 +1,7 @@
 [package]
 description = "Kiosk display agent for Norfair Operation Center"
 name = "noc-agent"
-version = "1.0.0"
+version = "0.3.6"
 edition = "2021"
 license = "MIT"
 

@@ -8,8 +8,11 @@ api_token = ""
 [data]
 file = "kiosks.json"
 commands_file = "commands.json"
+rdp_servers_file = "rdp_servers.json"
 
 [health]
 # noc_up reports 0 in /metrics once a heartbeat is older than this.
 # Keep it a few times the agents'/displays' own heartbeat interval.
 stale_after_seconds = 90
+history_file = "health.sqlite3"
+retention_days = 30

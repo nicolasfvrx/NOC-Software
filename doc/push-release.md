@@ -95,14 +95,15 @@ git push origin v1.1.0-rc.1
 
 ## Tag de suite et versions des applications
 
-Le tag identifie une livraison de l’ensemble **NOC**. Il ne modifie pas
-automatiquement les versions des trois applications. Les métadonnées des binaires
-proviennent de leurs `Cargo.toml` et peuvent rester différentes.
+Le tag identifie une livraison de l’ensemble **NOC**. Avant chaque release,
+aligner `VERSION`, le champ `version` des trois `Cargo.toml` et les entrées des
+applications dans leurs `Cargo.lock` sur la version du tag sans le préfixe `v`.
+Utiliser Cargo avec Rust 1.77.2 pour les deux applications Windows afin de
+conserver leur format de verrouillage, et Cargo stable pour Agent.
 
-Pour faire évoluer la version d’une application, modifier son champ `version`,
-mettre à jour son entrée dans `Cargo.lock` avec Cargo, puis commiter ces changements
-avant de créer le tag. Utiliser Rust 1.77.2 pour les deux applications Windows afin
-de conserver leur format de verrouillage et vérifier les builds avant publication.
+Exécuter `python scripts/check-versions.py` puis les vérifications de build,
+et commiter les changements avant de créer le tag. La matrice CI refuse de
+compiler si le tag, `VERSION` ou les versions Cargo ne correspondent pas.
 
 ## En cas d’échec
 

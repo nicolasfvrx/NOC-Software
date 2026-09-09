@@ -153,7 +153,9 @@ impl App {
                     self.last_message.clear();
                     return;
                 }
-                Ok(crate::health::RdpConfigFetch::Found(remote)) if remote.server.trim().is_empty() => {
+                Ok(crate::health::RdpConfigFetch::Found(remote))
+                    if remote.server.trim().is_empty() =>
+                {
                     self.kiosk_missing = false;
                     self.failed("RDP config from Manager: enabled but no server configured");
                     return;
@@ -165,7 +167,11 @@ impl App {
                     // attempt(), so nothing here leaks across reconnects.
                     self.config.rdp.server = remote.server;
                     self.config.rdp.port = remote.port;
-                    self.config.rdp.username = self.username.clone();
+                    self.config.rdp.username = if remote.username.trim().is_empty() {
+                        self.username.clone()
+                    } else {
+                        remote.username
+                    };
                     self.config.rdp.ignore_certificate_errors = remote.ignore_certificate_errors;
                     // None keeps ConfiguredProvider's existing DPAPI fallback.
                     self.config.rdp.password = remote.password;
@@ -243,14 +249,18 @@ impl App {
     }
     fn cancel_ready_timer(&mut self) {
         if let Some(id) = self.ready_timer.take() {
-            unsafe { let _ = KillTimer(self.window.hwnd, id); }
+            unsafe {
+                let _ = KillTimer(self.window.hwnd, id);
+            }
         }
     }
     fn mark_remote_session_ready(&mut self, source: &str) {
         if self.machine.state != AppState::Connecting {
             return;
         }
-        let Some(client) = self.client.as_ref() else { return; };
+        let Some(client) = self.client.as_ref() else {
+            return;
+        };
         if client.signals.failed.get() {
             return;
         }
@@ -264,7 +274,11 @@ impl App {
         }
         self.cancel_ready_timer();
         if self.machine.login_complete() {
-            self.window.update(Status::SessionEnded, &self.config.ui.disconnected_text, false);
+            self.window.update(
+                Status::SessionEnded,
+                &self.config.ui.disconnected_text,
+                false,
+            );
             // The full-size opaque child covers the branded frame, ready behind it on failure.
             self.client.as_ref().unwrap().set_visible(true);
             crate::log_error(format!("RDP session ready source={source}"));
@@ -383,7 +397,9 @@ impl App {
             // machine que recharger un fichier. Pas de compte a rebours (ca
             // ferait croire a une vraie boucle d'echec RDP) : juste l'icone
             // animee, pour montrer que ca continue de verifier tout seul.
-            AppState::Error | AppState::Reconnecting if self.config_missing || self.kiosk_missing => {
+            AppState::Error | AppState::Reconnecting
+                if self.config_missing || self.kiosk_missing =>
+            {
                 let title = if self.config_missing {
                     "Aucune configuration trouvée…"
                 } else {
@@ -439,16 +455,20 @@ pub fn run() -> Result<()> {
             if result == 0 || app.window.exit_shortcut(&message) {
                 break;
             }
-            if message.hwnd == app.window.hwnd && message.message == WM_TIMER
+            if message.hwnd == app.window.hwnd
+                && message.message == WM_TIMER
                 && app.ready_timer == Some(message.wParam.0)
             {
                 // Drain COM failures first; stale timers cannot expose a disconnected child.
                 app.events();
                 if app.ready_timer == Some(message.wParam.0) {
                     app.cancel_ready_timer();
-                    if app.client.as_ref().map(|c|
-                        !c.signals.failed.get() && c.is_connected().unwrap_or(false)
-                    ).unwrap_or(false) {
+                    if app
+                        .client
+                        .as_ref()
+                        .map(|c| !c.signals.failed.get() && c.is_connected().unwrap_or(false))
+                        .unwrap_or(false)
+                    {
                         app.mark_remote_session_ready("timer 2000 ms");
                     }
                 }

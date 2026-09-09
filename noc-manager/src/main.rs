@@ -4,12 +4,16 @@
 mod api;
 mod commands;
 mod config;
+mod dashboard;
 mod health;
 mod models;
+mod rdp_servers;
 mod storage;
-mod web;
 #[path = "../../shared/version.rs"]
 mod suite_version;
+#[cfg(test)]
+mod tests;
+mod web;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,6 +25,7 @@ use health::HealthStore;
 use storage::Storage;
 
 pub struct AppState {
+    pub rdp_servers: rdp_servers::ServerStore,
     pub storage: Storage,
     pub commands: CommandStore,
     pub health: HealthStore,
@@ -67,11 +72,27 @@ async fn run() -> Result<(), String> {
     let commands = CommandStore::load(&commands_path)?;
 
     let state = Arc::new(AppState {
+        rdp_servers: rdp_servers::ServerStore::load(std::path::Path::new(
+            &config.data.rdp_servers_file,
+        ))?,
         storage,
         commands,
-        health: HealthStore::new(),
+        health: HealthStore::load(
+            std::path::Path::new(&config.health.history_file),
+            config.health.retention_days,
+        ),
         api_token: config.server.api_token.trim().to_string(),
         health_stale_after_seconds: config.health.stale_after_seconds,
+    });
+
+    let maintenance = state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            let state = maintenance.clone();
+            let _ =
+                tokio::task::spawn_blocking(move || state.health.purge(health::now_unix())).await;
+        }
     });
 
     let app = Router::new()
