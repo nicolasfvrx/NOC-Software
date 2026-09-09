@@ -1,0 +1,428 @@
+# NOC Manager
+
+Guide commun : [build Windows et création des archives](../doc/windows.md).
+
+Petit gestionnaire de kiosques : un exécutable Rust tourne sur un serveur Windows,
+expose une interface web d'administration et une API HTTP. Chaque kiosque Linux
+(session xRDP) exécute `kiosk.sh`, qui interroge l'API et maintient Firefox ouvert
+en mode kiosque sur l'URL configurée.
+
+Usage prévu : réseau local uniquement.
+
+```
+[ Windows ]  noc-manager.exe  --->  http://0.0.0.0:8080
+                                          |
+                    +---------------------+---------------------+
+                    |                     |                     |
+              kiosk-noc-1           kiosk-noc-2             kiosk-hall
+              (kiosk.sh)             (kiosk.sh)             (kiosk.sh)
+```
+
+## Contenu
+
+| Fichier | Rôle |
+|---|---|
+| `src/main.rs` | démarrage, état partagé, serveur HTTP |
+| `src/config.rs` | lecture de `config.toml` (créé s'il manque) |
+| `src/models.rs` | structure `Kiosk` + validation |
+| `src/storage.rs` | chargement / écriture atomique de `kiosks.json` |
+| `src/api.rs` | API HTTP + token bearer optionnel |
+| `src/commands.rs` | commandes distantes (`commands.json`, queue / get / ack) |
+| `src/web.rs` | interface web (HTML/CSS générés en Rust) |
+| `rust-toolchain.toml` | pin Rust 1.77.2 (compatibilité Server 2012) |
+| `.cargo/config.toml` | CRT MSVC statique |
+| `kiosk.sh` | client Linux |
+| `config.example.toml`, `kiosks.example.json`, `commands.example.json` | exemples |
+
+Aucun JavaScript de framework, aucune base de données.
+
+## Build Windows (cible Windows Server 2012)
+
+Le projet est volontairement figé sur **Rust 1.77.2**, dernière version dont la
+bibliothèque standard reste compatible NT 6.2. Le pin est déclaré dans
+`rust-toolchain.toml`, donc `cargo` seul utilise déjà 1.77.2.
+
+```
+rustup toolchain install 1.77.2
+rustup target add x86_64-pc-windows-msvc --toolchain 1.77.2
+cargo +1.77.2 build --release --target x86_64-pc-windows-msvc
+```
+
+Binaire produit :
+
+```
+target\x86_64-pc-windows-msvc\release\noc-manager.exe
+```
+
+### Pourquoi 1.77.2
+
+Depuis Rust 1.78, `x86_64-pc-windows-msvc` exige Windows 10 / Server 2016. Concrètement,
+le binaire compilé avec un Rust récent importe `ProcessPrng` depuis `bcryptprimitives.dll`
+(ainsi que `WaitOnAddress` et `SetThreadDescription`) : cette DLL n'existe pas sur
+Server 2012, et le chargeur refuse donc de démarrer le programme.
+
+Compilé avec 1.77.2, le binaire n'importe plus que des APIs disponibles depuis Vista
+(`BCryptGenRandom`, `SystemFunction036`, SRW locks, IOCP), et son en-tête PE indique
+subsystem 6.0.
+
+Vérification possible sur le binaire produit :
+
+```
+dumpbin /imports noc-manager.exe | findstr /i "bcryptprimitives ProcessPrng WaitOnAddress"
+```
+
+Aucune ligne ne doit ressortir.
+
+### CRT statique
+
+`.cargo/config.toml` active `+crt-static` pour la cible MSVC :
+
+```toml
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+```
+
+Le `.exe` ne dépend donc d'aucun `vcruntime140.dll` / `api-ms-win-crt-*.dll` :
+aucun Visual C++ Redistributable à installer sur le serveur.
+
+### Dépendances et Cargo.lock
+
+Toutes les versions sont résolues pour rester compilables avec 1.77.2 ; `axum` est en
+0.7 (0.8 exige un Rust plus récent). Le `Cargo.lock` est en **format v3**, lisible par
+Cargo 1.77.2 — ne pas le régénérer avec un Cargo récent sans précaution, sinon il
+repasse en v4 et/ou tire des crates en edition 2024.
+
+Pour le régénérer proprement :
+
+```
+cargo +1.77.2 generate-lockfile
+```
+
+Si cette commande échoue (une dépendance transitive trop récente exige `edition2024`),
+passer par le résolveur MSRV du Cargo moderne, qui respecte `rust-version = "1.77.2"` :
+
+1. ajouter temporairement `resolver = "3"` sous `[package]` dans `Cargo.toml` ;
+2. `rm Cargo.lock && cargo +stable generate-lockfile`
+   (doit afficher *Locking N packages to latest Rust 1.77.2 compatible versions*) ;
+3. retirer `resolver = "3"` (Cargo 1.77.2 ne le connaît pas) ;
+4. vérifier avec `cargo +1.77.2 build --release --target x86_64-pc-windows-msvc`.
+
+Le fichier ainsi produit reste en v3.
+
+## Déploiement Windows
+
+Copier sur le serveur, dans un même dossier :
+
+```
+noc-manager.exe
+config.toml       (copie de config.example.toml)
+kiosks.json       (optionnel, créé automatiquement si absent)
+commands.json     (optionnel, créé automatiquement si absent)
+```
+
+Puis :
+
+```
+noc-manager.exe
+```
+
+Sortie attendue :
+
+```
+[kioskmanager] data file: kiosks.json
+[kioskmanager] api token: disabled
+[kioskmanager] listening on http://0.0.0.0:8080
+```
+
+`config.toml` et `kiosks.json` sont cherchés dans le **répertoire courant** : si le
+programme est lancé comme tâche planifiée ou service, définir le dossier de départ
+sur celui du `.exe`.
+
+Ouvrir le port 8080 en entrée :
+
+```
+netsh advfirewall firewall add rule name="NOC Manager" dir=in action=allow protocol=TCP localport=8080
+```
+
+## Configuration
+
+`config.toml` :
+
+```toml
+[server]
+listen = "0.0.0.0"
+port = 8080
+api_token = ""
+
+[data]
+file = "kiosks.json"
+commands_file = "commands.json"
+```
+
+`api_token` vide = aucune authentification. S'il est renseigné, les routes `/api/*`
+exigent l'en-tête `Authorization: Bearer <token>` (l'interface web reste ouverte) ;
+reporter alors la même valeur dans `KIOSK_API_TOKEN` en haut de `kiosk.sh`.
+
+## Interface web
+
+`http://<serveur>:8080/`
+
+* liste des kiosques : Name, Username, URL, Enabled, Restart schedule, Edit, Delete
+* bouton **Add kiosk**
+* formulaire Add/Edit avec aide cron intégrée
+
+Règles de validation :
+
+* `username` : obligatoire, unique, caractères `A-Z a-z 0-9 - _ .`
+* `name` : obligatoire
+* `url` : obligatoire, doit commencer par `http://` ou `https://`
+* `restart_cron` : optionnel ; si présent, 5 champs cron
+
+Chaque modification réécrit `kiosks.json` via un fichier temporaire renommé
+(écriture atomique), pour éviter toute corruption.
+
+## API
+
+### `GET /api/health`
+
+```json
+{ "status": "ok" }
+```
+
+### `GET /api/kiosk/{username}`
+
+```
+curl http://192.168.10.64:8080/api/kiosk/kiosk-noc-1
+```
+
+```json
+{
+  "username": "kiosk-noc-1",
+  "name": "Monitoring réseau",
+  "url": "https://grafana.example.com/d/network",
+  "enabled": true,
+  "restart_cron": "0 4 * * *"
+}
+```
+
+Kiosque désactivé : réponse identique avec `"enabled": false`.
+Sans `restart_cron` : `"restart_cron": null`.
+
+Kiosque inconnu — HTTP 404 :
+
+```json
+{ "error": "kiosk_not_found" }
+```
+
+## Commandes distantes
+
+Depuis l'interface web, chaque kiosque peut recevoir une commande ponctuelle, que
+l'agent Linux récupère à son prochain passage. Deux actions, et seulement deux :
+
+* `restart_browser` — redémarrage de Firefox
+* `restart_agent` — redémarrage complet de l'agent
+
+Toute autre valeur est rejetée en HTTP 400 `invalid_action`. Aucune commande shell
+n'est configurable depuis l'API : l'action est une simple étiquette que l'agent
+interprète lui-même.
+
+Une seule commande en attente par kiosque. Une nouvelle commande remplace la
+précédente et reçoit un nouvel `id` ; le compteur `next_id` ne recule jamais.
+« En attente » signifie ici « pas encore acquittée par l'agent » — il n'y a pas de
+suivi d'exécution.
+
+Le cron `restart_cron` reste indépendant : ces commandes sont immédiates.
+
+### `GET /api/kiosk/{username}/command`
+
+```json
+{ "command": { "id": 42, "action": "restart_browser" } }
+```
+
+Aucune commande — HTTP 200 :
+
+```json
+{ "command": null }
+```
+
+Kiosque inconnu — HTTP 404 `{ "error": "kiosk_not_found" }`.
+
+### `POST /api/kiosk/{username}/command/{id}/ack`
+
+L'agent confirme l'exécution ; la commande est alors retirée.
+
+| Cas | Réponse |
+|---|---|
+| id correspondant | 200 `{ "status": "acknowledged" }` |
+| aucune commande en attente | 404 `{ "error": "command_not_found" }` |
+| id différent de la commande en attente | 409 `{ "error": "command_id_mismatch" }` |
+
+L'acquittement d'une vieille commande ne supprime jamais une commande plus récente.
+
+### `POST /api/kiosk/{username}/command`
+
+Création côté administration, utilisée par l'interface web.
+
+```
+curl -X POST -H "Content-Type: application/json"      -d '{"action":"restart_browser"}'      http://192.168.10.64:8080/api/kiosk/kiosk-noc-1/command
+```
+
+Réponse HTTP 201 :
+
+```json
+{ "command": { "id": 42, "action": "restart_browser" } }
+```
+
+Erreurs : 404 `kiosk_not_found`, 400 `invalid_action`.
+
+Ces trois routes sont sous `/api/`, donc soumises au même `api_token` que le reste
+de l'API quand il est renseigné.
+
+### Interface web
+
+La liste affiche une colonne **Commande** (`restart_browser (#42)` ou *aucune*) et
+deux boutons par kiosque :
+
+* **Redémarrer Firefox** → `POST /kiosk/{username}/restart-browser`
+* **Redémarrer l'agent** → `POST /kiosk/{username}/restart-agent`, précédé d'un
+  `confirm()` navigateur
+
+Les deux redirigent vers la liste avec le message « Commande envoyée ».
+
+### commands.json
+
+```json
+{
+  "next_id": 44,
+  "pending": {
+    "kiosk-noc-1": {
+      "id": 42,
+      "action": "restart_browser",
+      "created_at": 1788912000
+    },
+    "kiosk-noc-2": {
+      "id": 43,
+      "action": "restart_agent",
+      "created_at": 1788912030
+    }
+  }
+}
+```
+
+Le fichier est créé vide (`{"next_id": 1, "pending": {}}`) s'il n'existe pas, et
+réécrit par fichier temporaire + rename comme `kiosks.json`. S'il est illisible au
+démarrage, le serveur ne plante pas : il journalise l'erreur, conserve le fichier
+sous `commands.json.invalid` et repart d'un état vide.
+
+Les journaux de commande :
+
+```
+COMMAND queued username=kiosk-noc-1 id=42 action=restart_browser
+COMMAND replaced username=kiosk-noc-1 old_id=41 new_id=42
+COMMAND fetched username=kiosk-noc-1 id=42
+COMMAND ack username=kiosk-noc-1 id=42
+COMMAND ack mismatch username=kiosk-noc-1 requested=41 pending=42
+```
+
+## Côté Linux (Zorin / Ubuntu)
+
+### Installation des dépendances
+
+```bash
+sudo apt update
+sudo apt install curl jq firefox -y
+```
+
+Si Firefox est fourni en snap et pose problème en kiosque, le paquet `firefox-esr`
+ou le tarball Mozilla conviennent aussi ; seule la commande `firefox` doit exister.
+
+### Installation du script
+
+```bash
+sudo cp kiosk.sh /usr/local/bin/kiosk.sh
+sudo chmod +x /usr/local/bin/kiosk.sh
+sudo sed -i 's|^KIOSK_SERVER=.*|KIOSK_SERVER="http://192.168.10.64:8080"|' /usr/local/bin/kiosk.sh
+```
+
+Le script détermine seul le compte via `id -un` : le même fichier sert à tous les kiosques.
+
+### Exemple d'exécution
+
+```bash
+$ /usr/local/bin/kiosk.sh
+2026-09-09 08:00:01 [kiosk-noc-1] starting, server http://192.168.10.64:8080
+2026-09-09 08:00:01 [kiosk-noc-1] configuration loaded
+2026-09-09 08:00:01 [kiosk-noc-1] restart schedule: 0 4 * * *
+2026-09-09 08:00:01 [kiosk-noc-1] launching Firefox: https://grafana.example.com/d/network
+2026-09-09 08:31:12 [kiosk-noc-1] URL changed
+2026-09-09 08:31:12 [kiosk-noc-1] stopping Firefox (pid 4211)
+2026-09-09 08:31:16 [kiosk-noc-1] launching Firefox: https://grafana.example.com/d/network2
+2026-09-10 04:00:03 [kiosk-noc-1] cron restart triggered
+```
+
+Journalisation dans un fichier :
+
+```bash
+/usr/local/bin/kiosk.sh >> ~/kiosk.log 2>&1
+```
+
+### Démarrage automatique dans la session xRDP
+
+Le script doit tourner **dans** la session graphique. Le plus simple est un
+lanceur autostart, créé une fois par compte kiosque :
+
+```bash
+mkdir -p ~/.config/autostart
+cat > ~/.config/autostart/kiosk.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Kiosk
+Exec=/usr/local/bin/kiosk.sh
+X-GNOME-Autostart-enabled=true
+EOF
+```
+
+Ne pas utiliser `crontab`, `/etc/crontab` ni de timer systemd : toute la
+planification est gérée par `kiosk.sh` à partir de `restart_cron`.
+
+## Comportement de kiosk.sh
+
+* `USERNAME="$(id -un)"`, appel de `$KIOSK_SERVER/api/kiosk/$USERNAME`
+* API injoignable ou kiosque inconnu → log + nouvelle tentative toutes les 10 s
+* `enabled=false` → Firefox arrêté, aucun lancement, la config continue d'être relue
+* `enabled=true` → `firefox --kiosk "$URL"`, PID conservé
+* configuration rechargée toutes les 30 s ; Firefox n'est **pas** relancé si rien n'a changé
+* changement d'URL → arrêt propre, pause de 3 s, relance sur la nouvelle URL
+* Firefox fermé ou planté → pause, rechargement de la config, relance si `enabled=true`
+* arrêt : `SIGTERM` d'abord, `SIGKILL` seulement en dernier recours après 10 s
+
+Réglages en haut du script : `KIOSK_SERVER`, `KIOSK_API_TOKEN`, `POLL_INTERVAL`,
+`RETRY_INTERVAL`, `RESTART_DELAY`, `STOP_TIMEOUT`, `TICK`.
+
+## restart_cron
+
+Syntaxe classique à 5 champs : `minute heure jour-du-mois mois jour-de-semaine`.
+Sont gérés : `*`, valeurs, listes `1,15`, plages `1-5`, pas `*/6`.
+
+| Expression | Effet |
+|---|---|
+| `0 4 * * *` | tous les jours à 04:00 |
+| `30 3 * * 1` | tous les lundis à 03:30 |
+| `0 */6 * * *` | toutes les 6 heures |
+| vide | aucun redémarrage planifié |
+
+Le redémarrage ne concerne **que Firefox** : ni Linux, ni xRDP, ni la session
+utilisateur ne sont touchés.
+
+Anti-doublon : le script mémorise la dernière minute déclenchée
+(`LAST_CRON_TRIGGER`, ex. `2026-09-09 04:00`) et ne redéclenche pas tant que la
+minute n'a pas changé.
+
+Attention : l'heure utilisée est celle du **poste Linux**, pas celle du serveur Windows.
+
+## Limites connues (V1)
+
+* pas de comptes administrateurs sur l'interface web (LAN uniquement)
+* le suivi de Firefox repose sur le PID du processus lancé ; si un Firefox est déjà
+  ouvert dans la session, le script ne le gère pas
+* pas de remontée d'état des kiosques vers le serveur

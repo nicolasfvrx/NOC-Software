@@ -1,0 +1,23 @@
+[
+  {
+    "username": "kiosk-noc-1",
+    "name": "Monitoring reseau",
+    "url": "https://grafana.example.com/d/network",
+    "enabled": true,
+    "restart_cron": "0 4 * * *"
+  },
+  {
+    "username": "kiosk-noc-2",
+    "name": "Supervision tickets",
+    "url": "https://tickets.example.com/board",
+    "enabled": true,
+    "restart_cron": null
+  },
+  {
+    "username": "kiosk-hall",
+    "name": "Ecran accueil",
+    "url": "https://intranet.example.com/hall",
+    "enabled": false,
+    "restart_cron": "30 3 * * 1"
+  }
+]

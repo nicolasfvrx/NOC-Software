@@ -1,0 +1,43 @@
+[package]
+description = "Kiosk display agent for Norfair Operation Center"
+name = "noc-agent"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+
+[[bin]]
+name = "noc-agent"
+path = "src/main.rs"
+
+[dependencies]
+# UI native (X11 / xRDP / XFCE)
+eframe = { version = "0.28", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "x11",
+    "wayland",
+] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+# Async / workers
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "sync"] }
+
+# HTTP
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# WebDriver (geckodriver)
+fantoccini = "0.21"
+
+# Cron + horodatage
+cron = "0.12"
+chrono = "0.4"
+
+anyhow = "1"
+
+[profile.release]
+opt-level = 2
+lto = true
+strip = true

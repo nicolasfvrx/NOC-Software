@@ -1,0 +1,13 @@
+[Unit]
+Description=NOC Agent — Norfair Operation Center
+After=network-online.target graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/opt/kiosk-agent/noc-agent
+WorkingDirectory=/opt/kiosk-agent
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

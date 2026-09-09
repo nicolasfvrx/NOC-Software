@@ -1,0 +1,6 @@
+/target
+/kiosks.json
+/commands.json
+/commands.json.invalid
+/config.toml
+*.tmp

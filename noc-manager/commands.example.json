@@ -1,0 +1,15 @@
+{
+  "next_id": 44,
+  "pending": {
+    "kiosk-noc-1": {
+      "id": 42,
+      "action": "restart_browser",
+      "created_at": 1788912000
+    },
+    "kiosk-noc-2": {
+      "id": 43,
+      "action": "restart_agent",
+      "created_at": 1788912030
+    }
+  }
+}

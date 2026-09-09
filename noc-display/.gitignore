@@ -1,0 +1,7 @@
+/target/
+/.tools/
+/DisplayClient/
+/config.toml
+*.log
+/credentials.dat
+*.tmp

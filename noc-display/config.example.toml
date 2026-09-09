@@ -1,0 +1,18 @@
+﻿[rdp]
+enabled = true
+server = "192.168.10.50"
+port = 3389
+username = "display1"
+# Mot de passe en clair ; supprimer cette ligne pour utiliser DPAPI.
+password = 'REMPLACER_PAR_LE_MOT_DE_PASSE'
+domain = ""
+retry_seconds = 10
+# Accepter le certificat non fiable (identité du serveur non vérifiée).
+ignore_certificate_errors = true
+
+[ui]
+connecting_text = "Connexion en cours…"
+disconnected_text = "Connexion interrompue"
+error_text = "Connexion impossible"
+reconnecting_text = "Nouvelle tentative dans {seconds} secondes"
+development_exit_enabled = true

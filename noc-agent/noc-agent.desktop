@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=NOC Agent
+GenericName=Kiosk display agent
+GenericName[fr]=Agent d’affichage kiosque
+Comment=Kiosk display agent for Norfair Operation Center
+Comment[fr]=Agent d’affichage des kiosques de Norfair Operation Center
+Exec=/opt/kiosk-agent/noc-agent
+Icon=noc-agent
+StartupWMClass=noc-agent
+Categories=System;Monitor;
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,95 @@
+name: Build NOC applications
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noc-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  windows:
+    name: ${{ matrix.app }} / Windows Server ${{ matrix.server }} x64
+    runs-on: windows-2022
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [noc-manager, noc-display]
+        server: ['2012', '2016']
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust compatible with Server 2012 and 2016
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.77.2 --profile minimal --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build, verify and package
+        shell: pwsh
+        run: ./scripts/build-windows.ps1 -App '${{ matrix.app }}' -Server '${{ matrix.server }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-windows-server-${{ matrix.server }}-x64
+          path: dist/${{ matrix.app }}-windows-server-${{ matrix.server }}-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub release
+    needs: [windows, linux]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: noc-*
+          merge-multiple: true
+          path: release-assets
+      - name: Create release and attach all packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/publish-release.sh
+
+  linux:
+    name: NOC Agent / ${{ matrix.os }} x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev \
+            libx11-dev libxcursor-dev libxrandr-dev libxi-dev libxinerama-dev \
+            libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            desktop-file-utils
+          rustup toolchain install stable --profile minimal
+      - name: Build, verify and package
+        run: bash scripts/build-linux.sh '${{ matrix.os }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: noc-agent-${{ matrix.os }}-x64
+          path: dist/noc-agent-${{ matrix.os }}-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 30

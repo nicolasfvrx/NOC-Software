@@ -1,0 +1,62 @@
+# KioskAgent — configuration locale
+# Copier ce fichier en config.toml a cote du binaire,
+# ou dans ~/.config/kiosk-agent/config.toml
+
+[manager]
+# URL de KioskManager (qui tourne sous Windows)
+url = "http://192.168.10.64:8080"
+# Relecture de la configuration pendant que Firefox tourne
+poll_seconds = 30
+# Attente avant nouvelle tentative apres une erreur (manager / cible)
+retry_seconds = 10
+# Relecture des commandes distantes (restart_browser / restart_agent)
+command_poll_seconds = 5
+# Timeout des appels HTTP vers KioskManager
+timeout_seconds = 10
+
+[ui]
+# Chemins relatifs : cherches a cote de config.toml puis dans assets/
+background = "background.jpg"
+logo = "logo.png"
+
+[firefox]
+flatpak = "/usr/bin/flatpak"
+app_id = "org.mozilla.firefox"
+load_timeout_seconds = 60
+slow_loading_after_seconds = 15
+retry_seconds = 10
+
+# --- options avancees (valeurs par defaut indiquees) ---------------------
+# Wrapper passe a geckodriver comme binaire Firefox.
+# Vide => <dossier de config.toml>/firefox-flatpak-wrapper.sh
+# wrapper = ""
+#
+# Chemin de geckodriver. Vide => recherche dans $PATH.
+# geckodriver = ""
+#
+# Profil Firefox PERSISTANT (cookies, session Grafana, certificats).
+# Doit rester dans un dossier accessible depuis le bac a sable Flatpak.
+# profile_dir = "~/.var/app/org.mozilla.firefox/kiosk-agent-profile"
+#
+# Pause entre l'arret et la relance de Firefox
+# restart_delay_seconds = 3
+#
+# Lancer Firefox avec --kiosk
+# kiosk = true
+#
+# Dernier recours si Firefox refuse de s'arreter : `flatpak kill <app_id>`
+# (n'agit que sur les instances Flatpak de l'utilisateur Linux courant,
+#  jamais sur les autres sessions kiosque — on n'utilise pas pkill firefox)
+# force_kill = true
+#
+# Delai d'attente du demarrage de geckodriver
+# geckodriver_timeout_seconds = 30
+
+[target]
+# Accepter les certificats TLS auto-signes lors du test de la destination
+insecure = false
+timeout_seconds = 10
+
+[log]
+# Chemin relatif = a cote de config.toml
+file = "kiosk-agent.log"
