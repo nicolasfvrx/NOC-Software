@@ -71,6 +71,8 @@ impl Default for RdpSettings {
 #[serde(default, deny_unknown_fields)]
 pub struct UiSettings {
     pub connecting_text: String,
+    pub manager_connecting_text: String,
+    pub manager_unreachable_text: String,
     pub disconnected_text: String,
     pub error_text: String,
     pub reconnecting_text: String,
@@ -80,6 +82,8 @@ impl Default for UiSettings {
     fn default() -> Self {
         Self {
             connecting_text: "Connexion en cours…".into(),
+            manager_connecting_text: "Connexion au Manager en cours…".into(),
+            manager_unreachable_text: "Manager injoignable".into(),
             disconnected_text: "Connexion interrompue".into(),
             error_text: "Connexion impossible".into(),
             reconnecting_text: "Nouvelle tentative dans {seconds} secondes".into(),
@@ -183,6 +187,8 @@ impl Config {
         }
         for text in [
             &config.ui.connecting_text,
+            &config.ui.manager_connecting_text,
+            &config.ui.manager_unreachable_text,
             &config.ui.disconnected_text,
             &config.ui.error_text,
             &config.ui.reconnecting_text,

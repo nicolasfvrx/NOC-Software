@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "noc-manager"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "axum",
  "rusqlite",

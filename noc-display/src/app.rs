@@ -18,6 +18,7 @@ use windows::{core::*, Win32::UI::WindowsAndMessaging::*};
 /// Delay before the first RDP connection attempt, so the branded startup
 /// frame is visible for a moment instead of connecting instantly.
 const STARTUP_DELAY: Duration = Duration::from_secs(8);
+const MANAGER_UNREACHABLE_AFTER: Duration = Duration::from_secs(60);
 
 /// Current RDP connection state, published for the heartbeat thread
 /// (health.rs) to read. A plain global is simplest here: this process hosts
@@ -60,6 +61,7 @@ pub struct App {
     /// pas ce kiosque (404) : message distinct de `config_missing`, puisque
     /// le probleme n'est pas local mais cote Manager.
     kiosk_missing: bool,
+    manager_unreachable_since: Option<Instant>,
 }
 impl App {
     fn new() -> Result<Self> {
@@ -89,6 +91,7 @@ impl App {
             ready_timer: None,
             config_missing: false,
             kiosk_missing: false,
+            manager_unreachable_since: None,
         })
     }
     fn schedule_first_attempt(&mut self) {
@@ -121,12 +124,23 @@ impl App {
             }
         }
         if !self.config.rdp.enabled {
+            self.manager_unreachable_since = None;
             self.machine = Machine::new();
             self.window.set_state_code(self.machine.state.code());
             self.window
                 .update(Status::Ready, "Bienvenue. Votre poste est prêt.", false);
             self.last_message.clear();
             return;
+        }
+        // Show the connection screen before the synchronous Manager request.
+        self.machine.connecting(Instant::now());
+        if self.config.manager.provides_rdp {
+            self.manager_unreachable_since.get_or_insert(Instant::now());
+        }
+        self.last_message.clear();
+        self.refresh();
+        unsafe {
+            let _ = windows::Win32::Graphics::Gdi::UpdateWindow(self.window.hwnd);
         }
         if self.config.manager.provides_rdp {
             match crate::health::fetch_rdp_config(
@@ -138,6 +152,7 @@ impl App {
                 // distinct from a network/server failure, someone needs to go
                 // create/configure this kiosk on Manager.
                 Ok(crate::health::RdpConfigFetch::KioskNotFound) => {
+                    self.manager_unreachable_since = None;
                     self.kiosk_missing = true;
                     self.failed("RDP config: kiosk not found on Manager");
                     return;
@@ -145,6 +160,7 @@ impl App {
                 // Manager turned this kiosk's RDP off: same idle screen as
                 // the local !rdp.enabled case above, not a connection error.
                 Ok(crate::health::RdpConfigFetch::Found(remote)) if !remote.enabled => {
+                    self.manager_unreachable_since = None;
                     self.kiosk_missing = false;
                     self.machine = Machine::new();
                     self.window.set_state_code(self.machine.state.code());
@@ -156,11 +172,13 @@ impl App {
                 Ok(crate::health::RdpConfigFetch::Found(remote))
                     if remote.server.trim().is_empty() =>
                 {
+                    self.manager_unreachable_since = None;
                     self.kiosk_missing = false;
                     self.failed("RDP config from Manager: enabled but no server configured");
                     return;
                 }
                 Ok(crate::health::RdpConfigFetch::Found(remote)) => {
+                    self.manager_unreachable_since = None;
                     self.kiosk_missing = false;
                     // Effective settings for this attempt only: Config::read()
                     // overwrites self.config wholesale at the top of the next
@@ -177,6 +195,9 @@ impl App {
                     self.config.rdp.password = remote.password;
                 }
                 Err(e) => {
+                    if self.manager_unreachable_since.is_none() {
+                        self.manager_unreachable_since = Some(Instant::now());
+                    }
                     self.failed(&format!(
                         "RDP config fetch from Manager failed HRESULT={:08x}",
                         e.code().0
@@ -184,6 +205,8 @@ impl App {
                     return;
                 }
             }
+        } else {
+            self.manager_unreachable_since = None;
         }
         self.machine.connecting(Instant::now());
         self.last_message.clear();
@@ -390,7 +413,13 @@ impl App {
             AppState::Starting | AppState::Connected => return,
             AppState::Connecting => (
                 Status::Loading,
-                self.config.ui.connecting_text.clone(),
+                if self.config.manager.provides_rdp
+                    && self.manager_unreachable_since.is_some()
+                {
+                    self.config.ui.manager_connecting_text.clone()
+                } else {
+                    self.config.ui.connecting_text.clone()
+                },
                 true,
             ),
             // Pas d'erreur RDP a proprement parler : rien a corriger sur cette
@@ -406,6 +435,30 @@ impl App {
                     "Aucune configuration kiosk trouvée…"
                 };
                 (Status::Loading, title.to_string(), true)
+            }
+            AppState::Error | AppState::Reconnecting
+                if self.manager_unreachable_since.is_some_and(|since| {
+                    since.elapsed() < MANAGER_UNREACHABLE_AFTER
+                }) =>
+            {
+                (
+                    Status::Loading,
+                    self.config.ui.manager_connecting_text.clone(),
+                    true,
+                )
+            }
+            AppState::Error | AppState::Reconnecting
+                if self.manager_unreachable_since.is_some() =>
+            {
+                let countdown = self.config.ui.reconnecting_text.replace(
+                    "{seconds}",
+                    &self.machine.seconds(Instant::now()).to_string(),
+                );
+                (
+                    Status::ServerUnavailable,
+                    format!("{}\n{}", self.config.ui.manager_unreachable_text, countdown),
+                    false,
+                )
             }
             AppState::Error | AppState::Reconnecting => {
                 let title = if self.machine.state == AppState::Error {

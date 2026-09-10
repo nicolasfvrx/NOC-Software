@@ -18,6 +18,8 @@ ignore_certificate_errors = true
 
 [ui]
 connecting_text = "Connexion en cours…"
+manager_connecting_text = "Connexion au Manager en cours…"
+manager_unreachable_text = "Manager injoignable"
 disconnected_text = "Connexion interrompue"
 error_text = "Connexion impossible"
 reconnecting_text = "Nouvelle tentative dans {seconds} secondes"

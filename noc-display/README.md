@@ -78,6 +78,8 @@ retry_seconds = 10
 
 [ui]
 connecting_text = "Connexion en cours…"
+manager_connecting_text = "Connexion au Manager en cours…"
+manager_unreachable_text = "Manager injoignable"
 disconnected_text = "Connexion interrompue"
 error_text = "Connexion impossible"
 reconnecting_text = "Nouvelle tentative dans {seconds} secondes"
@@ -182,6 +184,12 @@ Comportement :
   cette tentative ; `username` effectif = le compte Linux retourné par Manager,
   avec repli sur le compte Windows si la réponse ne contient pas de nom.
   `[rdp] username` du TOML reste utilisé si `provides_rdp = false`.
+
+Lorsque Manager est activé mais arrêté, Display affiche d'abord
+`manager_connecting_text` avec l'indicateur de chargement pendant 60 secondes.
+Les tentatives continuent en arrière-plan. Au-delà de ce délai, l'écran affiche
+`manager_unreachable_text` et le compte à rebours de la prochaine tentative.
+Une réponse valide de Manager retire immédiatement cet état.
 
 Implémenté en WinHTTP natif (`src/health.rs::fetch_rdp_config`), plafonné à
 16 Kio de réponse. Voir aussi le
